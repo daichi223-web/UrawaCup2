@@ -1,11 +1,12 @@
 /**
  * 日程管理画面
  * 予選リーグ・決勝トーナメントの日程管理
+ * Supabase版
  */
 import { useState, useMemo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import api from '@/core/http'
+import { tournamentsApi, venuesApi, matchesApi } from '@/lib/api'
 import { useAppStore } from '@/stores/appStore'
 import FinalsBracket from '@/components/FinalsBracket'
 import DraggableMatchList from '@/components/DraggableMatchList'
@@ -17,12 +18,6 @@ import type {
   Tournament,
   MatchStatus,
 } from '@/types'
-
-// APIレスポンス型
-interface MatchListResponse {
-  matches: MatchWithDetails[]
-  total: number
-}
 
 // タブの定義
 type TabKey = 'day1' | 'day2' | 'day3'
@@ -87,34 +82,52 @@ function MatchSchedule() {
   const { data: tournament, isLoading: isLoadingTournament } = useQuery({
     queryKey: ['tournament', tournamentId],
     queryFn: async () => {
-      const { data } = await api.get<Tournament>(`/tournaments/${tournamentId}`)
-      return data
+      const data = await tournamentsApi.getById(tournamentId)
+      // snake_case to camelCase変換
+      return {
+        ...data,
+        startDate: data.start_date,
+        endDate: data.end_date,
+      } as Tournament
     },
     enabled: !!tournamentId,
   })
 
   // 会場一覧を取得
-  const { data: venueData } = useQuery({
+  const { data: venues = [] } = useQuery({
     queryKey: ['venues', tournamentId],
     queryFn: async () => {
-      const { data } = await api.get<{ venues: Venue[]; total: number }>(`/venues?tournament_id=${tournamentId}`)
-      return data
+      return await venuesApi.getAll(tournamentId)
     },
     enabled: !!tournamentId,
   })
-  const venues = venueData?.venues ?? []
 
   // 試合一覧を取得
   const { data: matchData, isLoading: isLoadingMatches } = useQuery({
     queryKey: ['matches', tournamentId],
     queryFn: async () => {
-      const { data } = await api.get<MatchListResponse>(`/matches/?tournament_id=${tournamentId}&limit=500`)
-      return data
+      return await matchesApi.getAll(tournamentId)
     },
     enabled: !!tournamentId,
   })
 
-  const allMatches = matchData?.matches || []
+  // 試合データを変換
+  const allMatches: MatchWithDetails[] = useMemo(() => {
+    if (!matchData?.matches) return []
+    return matchData.matches.map((m: any) => ({
+      ...m,
+      matchDate: m.match_date,
+      matchTime: m.match_time,
+      venueId: m.venue_id,
+      matchOrder: m.match_number,
+      homeTeamId: m.home_team_id,
+      awayTeamId: m.away_team_id,
+      homeTeam: m.home_team,
+      awayTeam: m.away_team,
+      homeScoreTotal: m.home_score_total,
+      awayScoreTotal: m.away_score_total,
+    }))
+  }, [matchData])
 
   // 日付ごとの試合をフィルタリング
   const getDateString = (dayOffset: number) => {
@@ -167,91 +180,47 @@ function MatchSchedule() {
     )
   }, [allMatches])
 
-  // 予選リーグ日程生成
+  // 予選リーグ日程生成（Supabase版では未サポート）
   const generatePreliminaryMutation = useMutation({
     mutationFn: async () => {
-      const { data } = await api.post<MatchListResponse>(
-        `/matches/generate-schedule/${tournamentId}?start_time=09:30`
-      )
-      return data
-    },
-    onSuccess: (data) => {
-      toast.success(`予選リーグ ${data.total}試合を生成しました`)
-      queryClient.invalidateQueries({ queryKey: ['matches', tournamentId] })
-      setShowGenerateModal(false)
-    },
-    onError: (error: any) => {
-      const message = error?.response?.data?.detail || error?.message || '生成に失敗しました'
-      toast.error(message)
+      toast.error('日程自動生成はSupabase版では未サポートです')
+      throw new Error('未サポート')
     },
   })
 
-  // 決勝トーナメント生成
+  // 決勝トーナメント生成（Supabase版では未サポート）
   const generateFinalsMutation = useMutation({
     mutationFn: async () => {
-      const day3Str = getDateString(2)
-      const { data } = await api.post<MatchListResponse>(
-        `/matches/generate-finals/${tournamentId}?match_date=${day3Str}&start_time=09:00`
-      )
-      return data
-    },
-    onSuccess: (data) => {
-      toast.success(`決勝トーナメント ${data.total}試合を生成しました`)
-      queryClient.invalidateQueries({ queryKey: ['matches', tournamentId] })
-      setShowGenerateModal(false)
-    },
-    onError: (error: any) => {
-      const message = error?.response?.data?.detail || error?.message || '生成に失敗しました'
-      toast.error(message)
+      toast.error('日程自動生成はSupabase版では未サポートです')
+      throw new Error('未サポート')
     },
   })
 
-  // 研修試合生成
+  // 研修試合生成（Supabase版では未サポート）
   const generateTrainingMutation = useMutation({
     mutationFn: async () => {
-      const day3Str = getDateString(2)
-      const { data } = await api.post<MatchListResponse>(
-        `/matches/generate-training/${tournamentId}?match_date=${day3Str}&start_time=09:00&min_venues=1`
-      )
-      return data
-    },
-    onSuccess: (data) => {
-      toast.success(`研修試合 ${data.total}試合を生成しました`)
-      queryClient.invalidateQueries({ queryKey: ['matches', tournamentId] })
-      setShowGenerateModal(false)
-    },
-    onError: (error: any) => {
-      const message = error?.response?.data?.detail || error?.message || '生成に失敗しました'
-      toast.error(message)
+      toast.error('日程自動生成はSupabase版では未サポートです')
+      throw new Error('未サポート')
     },
   })
 
-  // 決勝トーナメント組み合わせ更新
+  // 決勝トーナメント組み合わせ更新（Supabase版では未サポート）
   const updateBracketMutation = useMutation({
     mutationFn: async () => {
-      const { data } = await api.put(`/matches/update-finals-bracket/${tournamentId}`)
-      return data
-    },
-    onSuccess: () => {
-      toast.success('組み合わせを更新しました')
-      queryClient.invalidateQueries({ queryKey: ['matches', tournamentId] })
-    },
-    onError: (error: any) => {
-      const message = error?.response?.data?.detail || error?.message || '更新に失敗しました'
-      toast.error(message)
+      toast.error('組み合わせ更新はSupabase版では未サポートです')
+      throw new Error('未サポート')
     },
   })
 
   // 試合情報更新
   const updateMatchMutation = useMutation({
     mutationFn: async (data: { matchId: number; matchDate: string; matchTime: string; venueId: number; matchOrder: number }) => {
-      const { data: result } = await api.put(`/matches/${data.matchId}`, {
-        matchDate: data.matchDate,
-        matchTime: data.matchTime,
-        venueId: data.venueId,
-        matchOrder: data.matchOrder,
+      return await matchesApi.update(data.matchId, {
+        match_date: data.matchDate,
+        match_time: data.matchTime,
+        venue_id: data.venueId,
+        match_number: data.matchOrder,
       })
-      return result
     },
     onSuccess: () => {
       toast.success('日程を更新しました')
@@ -260,7 +229,7 @@ function MatchSchedule() {
       setEditForm(null)
     },
     onError: (error: any) => {
-      const message = error?.response?.data?.detail || error?.message || '更新に失敗しました'
+      const message = error?.message || '更新に失敗しました'
       toast.error(message)
     },
   })
@@ -285,20 +254,16 @@ function MatchSchedule() {
     })
   }
 
-  // チーム入れ替え（ドラッグ&ドロップ用）- バッチ処理対応
+  // チーム入れ替え（ドラッグ&ドロップ用）
   const swapTeamsMutation = useMutation({
     mutationFn: async (data: { matchId: number; homeTeamId: number; awayTeamId: number }) => {
-      console.log('[SwapTeams] API呼び出し:', data)
-      const { data: result } = await api.put(`/matches/${data.matchId}`, {
-        homeTeamId: data.homeTeamId,
-        awayTeamId: data.awayTeamId,
+      return await matchesApi.update(data.matchId, {
+        home_team_id: data.homeTeamId,
+        away_team_id: data.awayTeamId,
       })
-      console.log('[SwapTeams] 成功:', result)
-      return result
     },
     onError: (error: any) => {
-      console.error('[SwapTeams] エラー:', error?.response || error)
-      const message = error?.response?.data?.detail || error?.message || '更新に失敗しました'
+      const message = error?.message || '更新に失敗しました'
       toast.error(message)
     },
   })
