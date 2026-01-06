@@ -14,6 +14,7 @@ import { AdminLayout } from './layouts/AdminLayout'
 // 公開ページ（認証不要）
 import { PublicStandings } from './pages/PublicStandings'
 import { PublicMatches } from './pages/PublicMatches'
+import { PublicBracket } from './pages/PublicBracket'
 
 // 認証ページ
 import { Login } from './pages/Login'
@@ -87,6 +88,17 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// 閲覧者は公開ページへリダイレクト
+function HomeRedirect() {
+  const { user } = useAppStore()
+
+  if (user?.role === 'viewer') {
+    return <Navigate to="/public/standings" replace />
+  }
+
+  return <Dashboard />
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -96,6 +108,7 @@ function App() {
           <Route path="/public">
             <Route path="standings" element={<PublicStandings />} />
             <Route path="matches" element={<PublicMatches />} />
+            <Route path="bracket" element={<PublicBracket />} />
           </Route>
 
           {/* 認証ページ */}
@@ -111,7 +124,7 @@ function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<HomeRedirect />} />
             <Route path="/tournaments" element={<Tournaments />} />
             <Route path="/teams" element={<Teams />} />
             <Route path="/venues" element={<Venues />} />

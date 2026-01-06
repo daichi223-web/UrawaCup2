@@ -231,6 +231,68 @@ def get_public_match_detail(
     }
 
 
+@router.get("/tournaments/{tournament_id}/schedule")
+def get_public_schedule(
+    tournament_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    公開日程表（F-92）
+
+    日付別に全試合を整理して返す。組み合わせ表用。
+    """
+    matches = (
+        db.query(Match)
+        .options(
+            joinedload(Match.home_team),
+            joinedload(Match.away_team),
+            joinedload(Match.venue)
+        )
+        .filter(Match.tournament_id == tournament_id)
+        .order_by(Match.match_date, Match.match_time)
+        .all()
+    )
+
+    # 日付別に整理
+    dates = sorted(set(m.match_date.isoformat() for m in matches if m.match_date))
+    matches_by_date = {}
+
+    for m in matches:
+        if not m.match_date:
+            continue
+        date_str = m.match_date.isoformat()
+        if date_str not in matches_by_date:
+            matches_by_date[date_str] = []
+
+        matches_by_date[date_str].append({
+            "id": m.id,
+            "match_date": date_str,
+            "match_time": m.match_time.strftime("%H:%M") if m.match_time else None,
+            "group_id": m.group_id,
+            "stage": m.stage.value if m.stage else None,
+            "status": m.status.value if m.status else None,
+            "venue": m.venue.name if m.venue else None,
+            "home_team": {
+                "id": m.home_team.id,
+                "name": m.home_team.name,
+                "short_name": m.home_team.short_name,
+            } if m.home_team else None,
+            "away_team": {
+                "id": m.away_team.id,
+                "name": m.away_team.name,
+                "short_name": m.away_team.short_name,
+            } if m.away_team else None,
+            "home_score": m.home_score_total,
+            "away_score": m.away_score_total,
+        })
+
+    return {
+        "tournament_id": tournament_id,
+        "dates": dates,
+        "matches_by_date": matches_by_date,
+    }
+
+
 @router.get("/tournaments/{tournament_id}/scorers")
 def get_public_scorers(
     tournament_id: int,
