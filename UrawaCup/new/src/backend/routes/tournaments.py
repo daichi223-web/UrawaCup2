@@ -116,6 +116,7 @@ def create_tournament(
 
 
 @router.put("/{tournament_id}", response_model=TournamentResponse)
+@router.patch("/{tournament_id}", response_model=TournamentResponse)
 def update_tournament(
     tournament_id: int,
     tournament_data: TournamentUpdate,
