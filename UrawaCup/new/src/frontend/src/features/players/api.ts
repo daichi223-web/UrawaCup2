@@ -63,13 +63,11 @@ export const playerApi = {
   ): Promise<PlayerListResponse> => {
     const formData = new FormData();
     formData.append('file', file);
+    // Content-Typeは自動設定させる（boundaryが必要なため）
     const response = await httpClient.post<PlayerListResponse>(
       `/players/import-csv/${teamId}`,
       formData,
-      {
-        params: { replace_existing: replaceExisting },
-        headers: { 'Content-Type': 'multipart/form-data' },
-      }
+      { params: { replace_existing: replaceExisting } }
     );
     return response.data;
   },
@@ -86,10 +84,10 @@ export const playerApi = {
   previewExcelImport: async (teamId: number, file: File): Promise<ImportPreviewResult> => {
     const formData = new FormData();
     formData.append('file', file);
+    // Content-Typeは自動設定させる（boundaryが必要なため）
     const response = await httpClient.post<ImportPreviewResult>(
       `/players/import-excel/${teamId}/preview`,
-      formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } }
+      formData
     );
     return response.data;
   },
@@ -107,6 +105,7 @@ export const playerApi = {
   ): Promise<ImportResult> => {
     const formData = new FormData();
     formData.append('file', file);
+    // Content-Typeは自動設定させる（boundaryが必要なため）
     const response = await httpClient.post<ImportResult>(
       `/players/import-excel/${teamId}`,
       formData,
@@ -117,7 +116,6 @@ export const playerApi = {
           import_uniforms: options.importUniforms ?? true,
           skip_warnings: options.skipWarnings ?? true,
         },
-        headers: { 'Content-Type': 'multipart/form-data' },
       }
     );
     return response.data;

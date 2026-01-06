@@ -52,12 +52,10 @@ export const teamApi = {
     const formData = new FormData();
     formData.append('file', file);
 
+    // Content-Typeは自動設定させる（boundaryが必要なため）
     const response = await httpClient.post<{ teams: Team[]; total: number }>(
       `/teams/import-csv?tournament_id=${tournamentId}`,
-      formData,
-      {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      }
+      formData
     );
     // バックエンドはTeamListを返すので、importedに変換
     return { imported: response.data.total };
@@ -68,12 +66,10 @@ export const teamApi = {
     const formData = new FormData();
     formData.append('file', file);
 
+    // Content-Typeは自動設定させる（boundaryが必要なため）
     const response = await httpClient.post<any>(
       `/players/import-excel/${teamId}`,
-      formData,
-      {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      }
+      formData
     );
     return response.data;
   },
