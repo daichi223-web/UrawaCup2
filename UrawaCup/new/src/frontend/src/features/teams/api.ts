@@ -52,14 +52,15 @@ export const teamApi = {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await httpClient.post<{ imported: number }>(
+    const response = await httpClient.post<{ teams: Team[]; total: number }>(
       `/teams/import-csv?tournament_id=${tournamentId}`,
       formData,
       {
         headers: { 'Content-Type': 'multipart/form-data' },
       }
     );
-    return response.data;
+    // バックエンドはTeamListを返すので、importedに変換
+    return { imported: response.data.total };
   },
 
   // Excelインポート（2列フォーマット対応）
