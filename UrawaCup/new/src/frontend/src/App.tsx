@@ -57,16 +57,37 @@ function App() {
           {/* ログインページ（レイアウトなし） */}
           <Route path="/login" element={<Login />} />
 
-          {/* メインレイアウト内のルート */}
+          {/* メインレイアウト内のルート（すべて認証必須） */}
           <Route element={<Layout />}>
-            {/* ダッシュボード（閲覧可能） */}
-            <Route path="/" element={<Dashboard />} />
+            {/* ダッシュボード（管理者専用） */}
+            <Route
+              path="/"
+              element={
+                <RequireAdmin>
+                  <Dashboard />
+                </RequireAdmin>
+              }
+            />
 
-            {/* 順位表（閲覧可能） */}
-            <Route path="/standings" element={<Standings />} />
+            {/* 順位表（管理者専用） */}
+            <Route
+              path="/standings"
+              element={
+                <RequireAdmin>
+                  <Standings />
+                </RequireAdmin>
+              }
+            />
 
-            {/* 得点ランキング（閲覧可能） */}
-            <Route path="/scorer-ranking" element={<ScorerRanking />} />
+            {/* 得点ランキング（管理者専用） */}
+            <Route
+              path="/scorer-ranking"
+              element={
+                <RequireAdmin>
+                  <ScorerRanking />
+                </RequireAdmin>
+              }
+            />
 
             {/* チーム管理（管理者専用） */}
             <Route
@@ -170,8 +191,8 @@ function App() {
           {/* Supabase接続テスト */}
           <Route path="/test" element={<SupabaseTest />} />
 
-          {/* 404リダイレクト */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {/* 404リダイレクト → 公開ページへ */}
+          <Route path="*" element={<Navigate to="/public/matches" replace />} />
         </Routes>
       </Suspense>
 
