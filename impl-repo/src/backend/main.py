@@ -31,6 +31,14 @@ async def lifespan(app: FastAPI):
     # 起動時
     logger.info(f"Starting UrawaCup API in {ENV} mode")
     Base.metadata.create_all(bind=engine)
+
+    # 初期データ投入（データベースが空の場合のみ）
+    try:
+        from .seed import seed_database
+        seed_database()
+    except Exception as e:
+        logger.warning(f"Seed skipped or failed: {e}")
+
     yield
     # 終了時
     logger.info("Shutting down UrawaCup API")

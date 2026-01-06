@@ -358,6 +358,7 @@ function Settings() {
                 type="date"
                 className="form-input"
                 value={tournamentForm.endDate}
+                min={tournamentForm.startDate || undefined}
                 onChange={(e) => setTournamentForm(prev => ({ ...prev, endDate: e.target.value }))}
               />
             </div>
@@ -563,6 +564,7 @@ function Settings() {
                 type="date"
                 className="form-input"
                 value={newTournamentForm.endDate}
+                min={newTournamentForm.startDate || undefined}
                 onChange={(e) => setNewTournamentForm(prev => ({ ...prev, endDate: e.target.value }))}
               />
             </div>
