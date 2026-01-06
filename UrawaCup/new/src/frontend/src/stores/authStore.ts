@@ -223,10 +223,10 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'urawa-cup-auth',
       storage: createJSONStorage(() => localStorage),
+      // isAuthenticated は保存しない（起動時に必ず検証する）
       partialize: (state) => ({
         user: state.user,
         accessToken: state.accessToken,
-        isAuthenticated: state.isAuthenticated,
       }),
     }
   )

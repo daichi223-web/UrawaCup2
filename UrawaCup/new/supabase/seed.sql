@@ -1,3 +1,20 @@
+-- プロファイルテーブル作成（Supabase Auth連携用）
+CREATE TABLE IF NOT EXISTS profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    username TEXT,
+    name TEXT,
+    role TEXT DEFAULT 'viewer',
+    venue_id INTEGER REFERENCES venues(id),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- RLSポリシー（profiles）
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow users to view own profile" ON profiles FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Allow users to update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Allow authenticated to read all profiles" ON profiles FOR SELECT USING (auth.role() = 'authenticated');
+
 -- サンプルデータ挿入
 -- 大会データ
 INSERT INTO tournaments (id, name, short_name, year, edition, start_date, end_date, match_duration, half_duration, interval_minutes, group_count, teams_per_group, advancing_teams)

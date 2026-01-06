@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import type { UserRole } from '@shared/types'
+import LoadingSpinner from '@/components/common/LoadingSpinner'
 
 /**
  * 認証が必要なルートを保護するコンポーネント
@@ -18,12 +19,17 @@ interface RequireAuthProps {
  * - 権限が不足している場合はダッシュボードにリダイレクト
  */
 export function RequireAuth({ children, requiredRole }: RequireAuthProps) {
-  const { isAuthenticated, user } = useAuthStore()
+  const { isAuthenticated, user, isLoading } = useAuthStore()
   const location = useLocation()
 
-  // 未認証の場合はログインページへ
+  // 認証確認中はローディング表示
+  if (isLoading) {
+    return <LoadingSpinner />
+  }
+
+  // 未認証の場合は公開ページへリダイレクト
   if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />
+    return <Navigate to="/public/matches" state={{ from: location.pathname }} replace />
   }
 
   // 権限チェックが必要な場合
@@ -32,7 +38,7 @@ export function RequireAuth({ children, requiredRole }: RequireAuthProps) {
 
     // 管理者は全ての権限を持つ
     if (user.role !== 'admin' && !roles.includes(user.role)) {
-      return <Navigate to="/" replace />
+      return <Navigate to="/public/matches" replace />
     }
   }
 
