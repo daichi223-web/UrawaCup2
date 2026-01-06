@@ -32,6 +32,7 @@ function TeamManagement() {
   const [bulkText, setBulkText] = useState('');
   const [bulkTeamType, setBulkTeamType] = useState<'invited' | 'local'>('invited');
   const [saving, setSaving] = useState(false);
+  const [updatingTeamId, setUpdatingTeamId] = useState<number | null>(null);
   const csvFileInputRef = useRef<HTMLInputElement>(null);
   const importCsvMutation = useImportTeamsCsv();
 
@@ -60,6 +61,20 @@ function TeamManagement() {
     if (!groupId) return teams;
     return teams.filter(t => (t.groupId || t.group_id) === groupId);
   }, [teams, activeTab]);
+
+  // インライン更新処理
+  const handleInlineUpdate = async (teamId: number, field: string, value: string | boolean | null) => {
+    setUpdatingTeamId(teamId);
+    try {
+      const { data } = await api.patch<Team>(`/teams/${teamId}`, { [field]: value });
+      setTeams(prev => prev.map(t => t.id === teamId ? data : t));
+      toast.success('更新しました');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '更新に失敗しました');
+    } finally {
+      setUpdatingTeamId(null);
+    }
+  };
 
   // 編集モーダルを開く
   const openEditModal = (team: Team) => {
@@ -288,39 +303,49 @@ function TeamManagement() {
                 filteredTeams.map((team) => (
                   <tr key={team.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {(() => {
-                        const gid = team.groupId || team.group_id;
-                        return (
-                          <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold
-                            ${gid === 'A' ? 'bg-red-100 text-red-800' :
-                              gid === 'B' ? 'bg-blue-100 text-blue-800' :
-                                gid === 'C' ? 'bg-green-100 text-green-800' :
-                                  gid === 'D' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'
-                            }`}>
-                            {gid || '-'}
-                          </span>
-                        );
-                      })()}
+                      <select
+                        className={`w-16 h-8 rounded-full font-bold text-center border-0 cursor-pointer
+                          ${(team.groupId || team.group_id) === 'A' ? 'bg-red-100 text-red-800' :
+                            (team.groupId || team.group_id) === 'B' ? 'bg-blue-100 text-blue-800' :
+                              (team.groupId || team.group_id) === 'C' ? 'bg-green-100 text-green-800' :
+                                (team.groupId || team.group_id) === 'D' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'
+                          }`}
+                        value={team.groupId || team.group_id || ''}
+                        onChange={(e) => handleInlineUpdate(team.id, 'groupId', e.target.value || null)}
+                        disabled={updatingTeamId === team.id}
+                        style={{ opacity: updatingTeamId === team.id ? 0.5 : 1 }}
+                      >
+                        <option value="">-</option>
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                        <option value="D">D</option>
+                      </select>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">#{team.id}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-lg font-bold text-gray-900">{team.name}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {(team.teamType || team.team_type) === 'local' ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          地元
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          招待
-                        </span>
-                      )}
+                      <select
+                        className={`px-2.5 py-0.5 rounded-full text-xs font-medium border-0 cursor-pointer
+                          ${(team.teamType || team.team_type) === 'local' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}
+                        value={team.teamType || team.team_type || 'invited'}
+                        onChange={(e) => handleInlineUpdate(team.id, 'teamType', e.target.value)}
+                        disabled={updatingTeamId === team.id}
+                        style={{ opacity: updatingTeamId === team.id ? 0.5 : 1 }}
+                      >
+                        <option value="invited">招待</option>
+                        <option value="local">地元</option>
+                      </select>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {(team.isVenueHost || team.is_venue_host) ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                          会場校
-                        </span>
-                      ) : '-'}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                      <input
+                        type="checkbox"
+                        checked={team.isVenueHost || team.is_venue_host || false}
+                        onChange={(e) => handleInlineUpdate(team.id, 'isVenueHost', e.target.checked)}
+                        disabled={updatingTeamId === team.id}
+                        className="h-5 w-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                        style={{ opacity: updatingTeamId === team.id ? 0.5 : 1 }}
+                      />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <div className="flex items-center gap-2">
