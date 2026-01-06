@@ -92,6 +92,40 @@ def create_default_tournament():
         db.close()
 
 
+def run_migrations():
+    """新規カラムを既存テーブルに追加するマイグレーション"""
+    from sqlalchemy import text, inspect
+
+    db = SessionLocal()
+    try:
+        # tournamentsテーブルに新規カラムを追加
+        inspector = inspect(db.bind)
+        columns = [col['name'] for col in inspector.get_columns('tournaments')]
+
+        migrations = []
+        if 'group_count' not in columns:
+            migrations.append("ALTER TABLE tournaments ADD COLUMN group_count INTEGER DEFAULT 4")
+        if 'teams_per_group' not in columns:
+            migrations.append("ALTER TABLE tournaments ADD COLUMN teams_per_group INTEGER DEFAULT 4")
+        if 'advancing_teams' not in columns:
+            migrations.append("ALTER TABLE tournaments ADD COLUMN advancing_teams INTEGER DEFAULT 1")
+
+        for sql in migrations:
+            try:
+                db.execute(text(sql))
+                print(f"✓ マイグレーション実行: {sql[:50]}...")
+            except Exception as e:
+                print(f"マイグレーションスキップ: {e}")
+
+        db.commit()
+        if migrations:
+            print(f"✓ {len(migrations)}件のマイグレーションを実行しました")
+    except Exception as e:
+        print(f"マイグレーションエラー: {e}")
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """アプリケーションのライフサイクル管理"""
@@ -99,6 +133,7 @@ async def lifespan(app: FastAPI):
     print("浦和カップ API サーバー起動中...")
     init_db()
     print("データベース初期化完了")
+    run_migrations()
     create_default_admin()
     create_default_tournament()
     yield
