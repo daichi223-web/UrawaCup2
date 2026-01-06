@@ -144,11 +144,8 @@ export const useAuthStore = create<AuthState>()(
 
       /**
        * 認証状態の確認（セッション検証）
-       * 開発モードではセッションがない場合に自動的に管理者としてログイン
        */
       checkAuth: async () => {
-        const { login } = get()
-
         set({ isLoading: true })
         try {
           // Supabaseのセッションを確認
@@ -183,17 +180,7 @@ export const useAuthStore = create<AuthState>()(
           console.error('セッション確認エラー:', error)
         }
 
-        // 開発モード: 自動的に管理者としてログイン
-        if (import.meta.env.DEV) {
-          console.log('開発モード: 管理者として自動ログインを試行...')
-          const success = await login({ username: 'admin@urawa-cup.local', password: 'admin123' })
-          if (success) {
-            console.log('自動ログイン成功')
-            return
-          }
-          console.log('自動ログイン失敗 - 手動でログインしてください')
-        }
-
+        // 未認証状態
         set({ isAuthenticated: false, user: null, isLoading: false })
       },
 
