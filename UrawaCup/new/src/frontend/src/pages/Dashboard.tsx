@@ -1,8 +1,6 @@
 import { Calendar, Users, Trophy, FileText, Clock, Eye } from 'lucide-react'
 import { useState, useEffect } from 'react';
-import { matchApi } from '@/features/matches';
-import api from '@/core/http';
-import { Team } from '@shared/types';
+import { teamsApi, matchesApi } from '@/lib/api';
 import { useAppStore } from '@/stores/appStore';
 import { useAuthStore } from '@/stores/authStore';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -33,19 +31,19 @@ function Dashboard() {
         setLoading(true);
         // 大会情報はLayoutで取得済みのためスキップ
 
-        // チーム数
-        const teamsResponse = await api.get<{ teams: Team[]; total: number }>(`/teams/?tournament_id=${tournamentId}`);
+        // チーム数 (Supabase API)
+        const teamsData = await teamsApi.getAll(tournamentId);
 
-        // 試合数
-        const matchesResponse = await matchApi.getMatches({ tournament_id: tournamentId, limit: 1000 });
-        const matches = matchesResponse.matches;
+        // 試合数 (Supabase API)
+        const matchesData = await matchesApi.getAll(tournamentId);
+        const matches = matchesData.matches;
 
         setStats({
           totalTeams: 24,
-          registeredTeams: teamsResponse.data.teams.length,
+          registeredTeams: teamsData.teams.length,
           totalMatches: matches.length,
-          completedMatches: matches.filter(m => m.status === 'completed').length,
-          pendingReports: 0, // TODO: Implement report logic
+          completedMatches: matches.filter((m: any) => m.status === 'completed').length,
+          pendingReports: 0,
         });
 
       } catch (err) {

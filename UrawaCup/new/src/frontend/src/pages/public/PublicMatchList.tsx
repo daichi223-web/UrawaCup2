@@ -1,39 +1,48 @@
-
 import { useState, useEffect } from 'react';
-import { matchApi } from '@/features/matches';
-import { MatchWithDetails } from '@shared/types';
+import { matchesApi } from '@/lib/api';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { MapPin, Clock } from 'lucide-react';
 
-export default function PublicMatchList() {
-    const [matches, setMatches] = useState<MatchWithDetails[]>([]);
-    const [loading, setLoading] = useState(true);
+// Supabaseから取得するデータの型
+interface MatchData {
+    id: number;
+    match_date: string;
+    match_time: string;
+    status: string;
+    home_score_total: number | null;
+    away_score_total: number | null;
+    home_pk: number | null;
+    away_pk: number | null;
+    home_team: { id: number; name: string } | null;
+    away_team: { id: number; name: string } | null;
+    venue: { id: number; name: string } | null;
+}
 
-    // Hardcoded for now, same as other pages
+export default function PublicMatchList() {
+    const [matches, setMatches] = useState<MatchData[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
     const tournamentId = 1;
 
     useEffect(() => {
         const fetchMatches = async () => {
             try {
                 setLoading(true);
-                const data = await matchApi.getMatches({
-                    tournament_id: tournamentId,
-                    limit: 100
-                });
-                // Sort by time descending (newest first)
-                const sorted = data.matches.sort((a, b) => {
-                    // If completed, put at bottom? No, simpler to just listen strictly to time
-                    // actually for "Feed", maybe ongoing first, then finished (desc), then upcoming (asc)
-                    // For simplicity: Date ASC, Time ASC
-                    const aTime = `${a.matchDate} ${a.matchTime}`;
-                    const bTime = `${b.matchDate} ${b.matchTime}`;
+                setError(null);
+                const data = await matchesApi.getAll(tournamentId);
+                // Sort by date and time
+                const sorted = (data.matches as MatchData[]).sort((a, b) => {
+                    const aTime = `${a.match_date} ${a.match_time}`;
+                    const bTime = `${b.match_date} ${b.match_time}`;
                     return new Date(aTime).getTime() - new Date(bTime).getTime();
                 });
                 setMatches(sorted);
-            } catch (error) {
-                console.error("Failed to load matches", error);
+            } catch (err) {
+                console.error("Failed to load matches", err);
+                setError("試合データの読み込みに失敗しました");
             } finally {
                 setLoading(false);
             }
@@ -43,14 +52,30 @@ export default function PublicMatchList() {
 
     if (loading) return <div className="flex justify-center py-10"><LoadingSpinner /></div>;
 
+    if (error) {
+        return (
+            <div className="text-center py-10 text-red-600">
+                {error}
+            </div>
+        );
+    }
+
+    if (matches.length === 0) {
+        return (
+            <div className="text-center py-10 text-gray-500">
+                試合データがありません
+            </div>
+        );
+    }
+
     // Group by Date for cleaner UI
     const groupedMatches = matches.reduce((acc, match) => {
-        const dateStr = match.matchDate || '';
+        const dateStr = match.match_date || '';
         const date = format(new Date(dateStr), 'M月d日(E)', { locale: ja });
         if (!acc[date]) acc[date] = [];
         acc[date].push(match);
         return acc;
-    }, {} as Record<string, MatchWithDetails[]>);
+    }, {} as Record<string, MatchData[]>);
 
     return (
         <div className="space-y-6 pb-20">
@@ -70,7 +95,7 @@ export default function PublicMatchList() {
     );
 }
 
-function PublicMatchCard({ match }: { match: MatchWithDetails }) {
+function PublicMatchCard({ match }: { match: MatchData }) {
     const isFinished = match.status === 'completed';
     const isLive = match.status === 'in_progress';
 
@@ -80,7 +105,7 @@ function PublicMatchCard({ match }: { match: MatchWithDetails }) {
             <div className="bg-gray-50 px-4 py-2 flex justify-between items-center text-xs text-gray-500">
                 <div className="flex items-center gap-1">
                     <Clock className="w-3 h-3" />
-                    {match.matchTime || '--:--'}
+                    {match.match_time || '--:--'}
                     {isLive && <span className="ml-2 text-red-600 font-bold animate-pulse">● LIVE</span>}
                     {isFinished && <span className="ml-2 font-medium text-gray-400">終了</span>}
                 </div>
@@ -96,10 +121,10 @@ function PublicMatchCard({ match }: { match: MatchWithDetails }) {
                     {/* Home Team */}
                     <div className="flex-1 flex flex-col items-center gap-1">
                         <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center font-bold text-gray-700 text-xs">
-                            {match.homeTeam?.name.slice(0, 1)}
+                            {match.home_team?.name?.slice(0, 1) || '?'}
                         </div>
                         <span className="font-bold text-sm text-center leading-tight">
-                            {match.homeTeam?.name}
+                            {match.home_team?.name || 'TBD'}
                         </span>
                     </div>
 
@@ -108,15 +133,15 @@ function PublicMatchCard({ match }: { match: MatchWithDetails }) {
                         <div className="text-3xl font-black font-mono tracking-widest text-gray-800">
                             {isFinished || isLive ? (
                                 <>
-                                    {match.homeScoreTotal ?? '-'} <span className="text-gray-300 text-xl">-</span> {match.awayScoreTotal ?? '-'}
+                                    {match.home_score_total ?? '-'} <span className="text-gray-300 text-xl">-</span> {match.away_score_total ?? '-'}
                                 </>
                             ) : (
                                 <span className="text-xl text-gray-400">vs</span>
                             )}
                         </div>
-                        {(match.homePK != null || match.awayPK != null) && (
+                        {(match.home_pk != null || match.away_pk != null) && (
                             <span className="text-xs text-gray-500 mt-1">
-                                (PK: {match.homePK}-{match.awayPK})
+                                (PK: {match.home_pk}-{match.away_pk})
                             </span>
                         )}
                     </div>
@@ -124,10 +149,10 @@ function PublicMatchCard({ match }: { match: MatchWithDetails }) {
                     {/* Away Team */}
                     <div className="flex-1 flex flex-col items-center gap-1">
                         <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center font-bold text-gray-700 text-xs">
-                            {match.awayTeam?.name.slice(0, 1)}
+                            {match.away_team?.name?.slice(0, 1) || '?'}
                         </div>
                         <span className="font-bold text-sm text-center leading-tight">
-                            {match.awayTeam?.name}
+                            {match.away_team?.name || 'TBD'}
                         </span>
                     </div>
                 </div>

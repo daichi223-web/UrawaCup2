@@ -3,8 +3,7 @@ import { Trophy, Calendar, List, Award } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import api from '@/core/http';
-import type { Tournament } from '@shared/types';
+import { tournamentsApi } from '@/lib/api';
 
 function PublicLayout() {
     const location = useLocation();
@@ -13,10 +12,7 @@ function PublicLayout() {
     // 大会情報を取得（まだストアにない場合）
     const { data: tournament } = useQuery({
         queryKey: ['tournament', 1],
-        queryFn: async () => {
-            const { data } = await api.get<Tournament>('/tournaments/1');
-            return data;
-        },
+        queryFn: () => tournamentsApi.getById(1),
         enabled: !currentTournament, // ストアにない場合のみ取得
     });
 

@@ -1,10 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
 import { Trophy, Medal, RefreshCw } from 'lucide-react';
-import { standingApi, type TopScorer } from '@/features/standings';
+import { standingsApi } from '@/lib/api';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 
+// lib/api.tsから返されるデータ型
+interface TopScorer {
+    rank: number;
+    scorerName: string;
+    teamId: number;
+    teamName: string;
+    goals: number;
+}
+
 export default function PublicScorerRanking() {
-    const tournamentId = 1; // Hardcoded for now
+    const tournamentId = 1;
 
     const {
         data: scorers = [],
@@ -14,7 +23,7 @@ export default function PublicScorerRanking() {
         isFetching,
     } = useQuery<TopScorer[]>({
         queryKey: ['top-scorers', tournamentId],
-        queryFn: () => standingApi.getTopScorers(tournamentId, 30),
+        queryFn: () => standingsApi.getTopScorers(tournamentId, 30),
         refetchOnWindowFocus: true,
         staleTime: 30000,
     });
