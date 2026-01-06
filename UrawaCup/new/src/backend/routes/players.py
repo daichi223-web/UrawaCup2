@@ -50,23 +50,33 @@ def get_players(
     db: Session = Depends(get_db),
 ):
     """選手一覧を取得"""
-    query = db.query(Player)
+    import traceback
+    try:
+        query = db.query(Player)
 
-    if team_id:
-        query = query.filter(Player.team_id == team_id)
-    elif tournament_id:
-        # 大会IDでフィルタする場合はチームテーブルをjoin
-        query = query.join(Team).filter(Team.tournament_id == tournament_id)
+        if team_id:
+            query = query.filter(Player.team_id == team_id)
+        elif tournament_id:
+            # 大会IDでフィルタする場合はチームテーブルをjoin
+            query = query.join(Team).filter(Team.tournament_id == tournament_id)
 
-    total = query.count()
-    players = (
-        query.order_by(Player.team_id, Player.number)
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
+        total = query.count()
+        players = (
+            query.order_by(Player.team_id, Player.number)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
 
-    return PlayerList(players=players, total=total)
+        return PlayerList(players=players, total=total)
+    except Exception as e:
+        print(f"=== Players Route Error ===")
+        print(f"Error: {e}")
+        print(f"Traceback:\n{traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": str(e), "type": type(e).__name__}
+        )
 
 
 @router.get("/suggest", response_model=List[PlayerSuggestion])
