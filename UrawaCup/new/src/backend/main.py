@@ -176,6 +176,27 @@ app.add_middleware(
 app.include_router(api_router, prefix="/api")
 
 
+# グローバルエラーハンドラ（デバッグ用）
+from fastapi import Request
+from fastapi.responses import JSONResponse
+import traceback
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """全ての例外をキャッチしてログ出力"""
+    error_detail = traceback.format_exc()
+    print(f"=== エラー発生 ===")
+    print(f"URL: {request.url}")
+    print(f"Method: {request.method}")
+    print(f"Error: {exc}")
+    print(f"Traceback:\n{error_detail}")
+    print("==================")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "type": type(exc).__name__}
+    )
+
+
 @app.get("/")
 async def root():
     """ルートエンドポイント"""
