@@ -1,0 +1,8 @@
+{
+  "buildCommand": "cd UrawaCup/new/src/frontend && npm install && npm run build",
+  "outputDirectory": "UrawaCup/new/src/frontend/dist",
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
