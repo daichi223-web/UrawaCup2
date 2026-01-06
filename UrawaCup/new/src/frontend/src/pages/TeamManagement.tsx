@@ -26,8 +26,11 @@ function TeamManagement() {
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showBulkModal, setShowBulkModal] = useState(false);
   const [editForm, setEditForm] = useState({ name: '', groupId: '', teamType: 'invited', isVenueHost: false });
   const [addForm, setAddForm] = useState({ name: '', groupId: '', teamType: 'invited', isVenueHost: false });
+  const [bulkText, setBulkText] = useState('');
+  const [bulkGroupId, setBulkGroupId] = useState('');
   const [saving, setSaving] = useState(false);
   const csvFileInputRef = useRef<HTMLInputElement>(null);
   const importCsvMutation = useImportTeamsCsv();
@@ -123,7 +126,7 @@ function TeamManagement() {
   const handleCsvImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    
+
     try {
       const result = await importCsvMutation.mutateAsync({ tournamentId, file });
       toast.success(`${result.imported}チームをインポートしました`);
@@ -141,6 +144,60 @@ function TeamManagement() {
     }
   };
 
+  // 一括登録処理
+  const handleBulkAdd = async () => {
+    const lines = bulkText.split('\n').map(line => line.trim()).filter(line => line);
+    if (lines.length === 0) {
+      toast.error('チーム名を入力してください');
+      return;
+    }
+
+    setSaving(true);
+    let successCount = 0;
+    const errors: string[] = [];
+
+    for (const line of lines) {
+      // タブ区切りの場合: チーム名\t略称\tグループ\t区分
+      const parts = line.split('\t');
+      const name = parts[0]?.trim();
+      const shortName = parts[1]?.trim() || null;
+      const groupId = parts[2]?.trim().toUpperCase() || bulkGroupId || null;
+      const teamType = parts[3]?.trim().toLowerCase() === 'local' ? 'local' : 'invited';
+
+      if (!name) continue;
+
+      try {
+        await api.post<Team>('/teams/', {
+          name,
+          shortName,
+          tournamentId: tournamentId,
+          groupId: groupId && ['A', 'B', 'C', 'D'].includes(groupId) ? groupId : null,
+          teamType,
+          isVenueHost: false,
+        });
+        successCount++;
+      } catch (error) {
+        errors.push(name);
+      }
+    }
+
+    // チーム一覧を再取得
+    const response = await api.get<{ teams: Team[]; total: number }>(`/teams/?tournament_id=${tournamentId}`);
+    setTeams(response.data.teams);
+
+    if (successCount > 0) {
+      toast.success(`${successCount}チームを登録しました`);
+    }
+    if (errors.length > 0) {
+      toast.error(`${errors.length}チームの登録に失敗: ${errors.slice(0, 3).join(', ')}${errors.length > 3 ? '...' : ''}`);
+    }
+
+    setShowBulkModal(false);
+    setBulkText('');
+    setBulkGroupId('');
+    setSaving(false);
+  };
+
   if (loading) return <LoadingSpinner />;
   return (
     <div className="space-y-6">
@@ -152,7 +209,7 @@ function TeamManagement() {
             参加チームの登録・編集・グループ分けを行います
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <input
             ref={csvFileInputRef}
             type="file"
@@ -166,6 +223,12 @@ function TeamManagement() {
             disabled={importCsvMutation.isPending}
           >
             {importCsvMutation.isPending ? 'インポート中...' : 'CSVインポート'}
+          </button>
+          <button
+            className="btn-secondary bg-purple-600 text-white hover:bg-purple-700"
+            onClick={() => setShowBulkModal(true)}
+          >
+            一括登録
           </button>
           <button className="btn-primary" onClick={() => setShowAddModal(true)}>チーム追加</button>
           <Link to="/players" className="btn-secondary bg-green-600 text-white hover:bg-green-700">
@@ -420,6 +483,75 @@ function TeamManagement() {
               disabled={saving}
             >
               {saving ? '追加中...' : '追加'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* 一括登録モーダル */}
+      <Modal
+        isOpen={showBulkModal}
+        onClose={() => setShowBulkModal(false)}
+        title="チーム一括登録"
+      >
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+            <p className="font-medium mb-1">入力形式:</p>
+            <ul className="list-disc list-inside space-y-1 text-xs">
+              <li>1行に1チーム名を入力</li>
+              <li>Excelからコピペ可（タブ区切り）</li>
+              <li>タブ区切り: チーム名 → 略称 → グループ(A/B/C/D) → 区分(local/invited)</li>
+            </ul>
+          </div>
+          <div>
+            <label className="form-label">デフォルトグループ（省略可）</label>
+            <select
+              className="form-input"
+              value={bulkGroupId}
+              onChange={(e) => setBulkGroupId(e.target.value)}
+            >
+              <option value="">グループ未設定</option>
+              <option value="A">Aグループ</option>
+              <option value="B">Bグループ</option>
+              <option value="C">Cグループ</option>
+              <option value="D">Dグループ</option>
+            </select>
+          </div>
+          <div>
+            <label className="form-label">チーム一覧 *</label>
+            <textarea
+              className="form-input min-h-[200px] font-mono text-sm"
+              value={bulkText}
+              onChange={(e) => setBulkText(e.target.value)}
+              placeholder={`浦和南高校
+市立浦和高校
+前橋育英高校
+
+または（Excelからコピペ）:
+浦和南高校\t浦和南\tA\tlocal
+市立浦和高校\t市浦和\tB\tlocal`}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              {bulkText.split('\n').filter(l => l.trim()).length}チーム検出
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              className="btn-secondary"
+              onClick={() => {
+                setShowBulkModal(false);
+                setBulkText('');
+                setBulkGroupId('');
+              }}
+            >
+              キャンセル
+            </button>
+            <button
+              className="btn-primary"
+              onClick={handleBulkAdd}
+              disabled={saving || !bulkText.trim()}
+            >
+              {saving ? '登録中...' : '一括登録'}
             </button>
           </div>
         </div>
