@@ -102,10 +102,17 @@ def get_db_context() -> Generator[Session, None, None]:
 def init_db():
     """
     データベースを初期化（テーブル作成）
-    
+
     アプリケーション起動時に呼び出す
     """
+    # 全モデルをインポートしてBase.metadataに登録
+    from models import (
+        Tournament, Team, Player, Staff, TeamUniform,
+        Group, Venue, Match, Goal, Standing, ExclusionPair,
+        User, ReportRecipient, TournamentFinalRanking, OutstandingPlayer
+    )
     Base.metadata.create_all(bind=engine)
+    print(f"✓ テーブル作成完了: {list(Base.metadata.tables.keys())}")
 
 
 def drop_db():
