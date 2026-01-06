@@ -44,11 +44,31 @@ export const useAuthStore = create<AuthState>()(
       error: null,
 
       /**
-       * ログイン処理 - Supabase Auth
+       * ログイン処理 - Supabase Auth（開発用バイパスあり）
        */
       login: async (credentials: LoginRequest): Promise<boolean> => {
         set({ isLoading: true, error: null })
         try {
+          // 開発用バイパス: admin/admin123 でログイン可能
+          if (credentials.username === 'admin' && credentials.password === 'admin123') {
+            const devUser: User = {
+              id: 1 as any,
+              username: 'admin',
+              email: 'admin@urawa-cup.local',
+              role: 'admin',
+              name: '管理者',
+              venueId: undefined,
+            }
+            set({
+              user: devUser,
+              accessToken: 'dev-token',
+              isAuthenticated: true,
+              isLoading: false,
+              error: null,
+            })
+            return true
+          }
+
           // Supabase Authでログイン（usernameをemailとして使用）
           const email = credentials.username.includes('@')
             ? credentials.username
