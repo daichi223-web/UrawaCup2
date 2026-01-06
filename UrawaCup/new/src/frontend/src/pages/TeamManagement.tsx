@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import api from '@/core/http';
 import { Team } from '@shared/types';
 import LoadingSpinner from '../components/common/LoadingSpinner';
@@ -261,6 +262,12 @@ function TeamManagement() {
                       >
                         編集
                       </button>
+                      <Link
+                        to={`/players?team=${team.id}`}
+                        className="text-green-600 hover:text-green-900"
+                      >
+                        選手管理
+                      </Link>
                     </td>
                   </tr>
                 ))

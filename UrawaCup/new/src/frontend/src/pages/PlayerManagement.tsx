@@ -1,6 +1,7 @@
 // src/frontend/src/pages/PlayerManagement.tsx
 // 選手管理ページ
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTeams } from '@/features/teams/hooks';
 import {
   usePlayersByTeam,
@@ -22,8 +23,19 @@ export default function PlayerManagement() {
   const tournamentId = currentTournament?.id || 1;
   const { data: teams = [] } = useTeams(tournamentId);
 
+  // URLパラメータからチームIDを取得
+  const [searchParams] = useSearchParams();
+  const teamIdFromUrl = searchParams.get('team');
+
   // 選択中のチーム
   const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null);
+
+  // URLパラメータがあれば自動選択
+  useEffect(() => {
+    if (teamIdFromUrl && !selectedTeamId) {
+      setSelectedTeamId(Number(teamIdFromUrl));
+    }
+  }, [teamIdFromUrl, selectedTeamId]);
   const { data: players = [], isLoading: loadingPlayers } = usePlayersByTeam(selectedTeamId || 0);
 
   // モーダル状態
@@ -31,6 +43,8 @@ export default function PlayerManagement() {
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingPlayer, setDeletingPlayer] = useState<Player | null>(null);
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkText, setBulkText] = useState('');
 
   // フォーム
   const [form, setForm] = useState<CreatePlayerInput>({
@@ -168,6 +182,54 @@ export default function PlayerManagement() {
     }
   };
 
+  // 一括コピペ追加
+  const handleBulkImport = async () => {
+    if (!selectedTeamId || !bulkText.trim()) return;
+
+    const lines = bulkText.trim().split('\n');
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const line of lines) {
+      const parts = line.split(/[\t,]/).map(s => s.trim());
+      if (parts.length < 2) continue;
+
+      const number = parseInt(parts[0], 10);
+      const name = parts[1];
+      const grade = parts[2] ? parseInt(parts[2], 10) : undefined;
+
+      if (!name) continue;
+
+      try {
+        await createMutation.mutateAsync({
+          teamId: selectedTeamId,
+          number: isNaN(number) ? null : number,
+          name,
+          nameKana: '',
+          grade: isNaN(grade as number) ? undefined : grade,
+          position: undefined,
+          height: undefined,
+          previousTeam: '',
+          isCaptain: false,
+          notes: '',
+        });
+        successCount++;
+      } catch {
+        errorCount++;
+      }
+    }
+
+    if (successCount > 0) {
+      toast.success(`${successCount}名を追加しました`);
+    }
+    if (errorCount > 0) {
+      toast.error(`${errorCount}名の追加に失敗しました`);
+    }
+
+    setShowBulkModal(false);
+    setBulkText('');
+  };
+
   return (
     <div className="container mx-auto px-4 py-6">
       <div className="flex items-center justify-between mb-6">
@@ -201,6 +263,15 @@ export default function PlayerManagement() {
             disabled={!selectedTeamId || importExcelMutation.isPending}
           >
             Excelインポート
+          </button>
+
+          {/* 一括追加 */}
+          <button
+            className="btn-secondary"
+            onClick={() => setShowBulkModal(true)}
+            disabled={!selectedTeamId}
+          >
+            一括追加
           </button>
 
           {/* 選手追加 */}
@@ -437,6 +508,50 @@ export default function PlayerManagement() {
                 disabled={deleteMutation.isPending}
               >
                 {deleteMutation.isPending ? '削除中...' : '削除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 一括追加モーダル */}
+      {showBulkModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+            <h2 className="text-xl font-bold mb-4">選手一括追加</h2>
+            <p className="text-sm text-gray-600 mb-3">
+              以下の形式で選手情報を貼り付けてください（タブ区切りまたはカンマ区切り）
+            </p>
+            <div className="bg-gray-100 p-2 rounded text-xs mb-3 font-mono">
+              背番号, 選手名, 学年<br />
+              1, 山田太郎, 3<br />
+              2, 鈴木次郎, 2<br />
+              ...
+            </div>
+            <textarea
+              className="form-input w-full h-48 font-mono text-sm"
+              placeholder="1	山田太郎	3
+2	鈴木次郎	2
+3	佐藤三郎	3"
+              value={bulkText}
+              onChange={(e) => setBulkText(e.target.value)}
+            />
+            <div className="flex justify-end gap-3 mt-4">
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  setShowBulkModal(false);
+                  setBulkText('');
+                }}
+              >
+                キャンセル
+              </button>
+              <button
+                className="btn-primary"
+                onClick={handleBulkImport}
+                disabled={!bulkText.trim() || createMutation.isPending}
+              >
+                {createMutation.isPending ? '追加中...' : '一括追加'}
               </button>
             </div>
           </div>
