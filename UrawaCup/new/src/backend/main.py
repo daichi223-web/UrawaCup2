@@ -41,6 +41,57 @@ def create_default_admin():
         db.close()
 
 
+def create_default_tournament():
+    """デフォルト大会を作成（存在しない場合のみ）"""
+    from models.tournament import Tournament
+    from models.group import Group
+    from datetime import date
+
+    db = SessionLocal()
+    try:
+        # 大会が存在するかチェック
+        tournament = db.query(Tournament).first()
+        if not tournament:
+            # デフォルト大会を作成
+            tournament = Tournament(
+                name="浦和カップ",
+                edition=1,
+                year=2025,
+                start_date=date(2025, 3, 25),
+                end_date=date(2025, 3, 28),
+                match_duration=50,
+                half_duration=25,
+                interval_minutes=10,
+            )
+            db.add(tournament)
+            db.flush()
+
+            # グループを自動作成（A, B, C, D）
+            group_names = {
+                "A": "Aグループ（浦和南G）",
+                "B": "Bグループ（市立浦和G）",
+                "C": "Cグループ（浦和学院G）",
+                "D": "Dグループ（武南G）",
+            }
+            for group_id, group_name in group_names.items():
+                group = Group(
+                    id=group_id,
+                    tournament_id=tournament.id,
+                    name=group_name,
+                )
+                db.add(group)
+
+            db.commit()
+            print("✓ デフォルト大会を作成しました (浦和カップ 2025)")
+        else:
+            print("✓ 大会は既に存在します")
+    except Exception as e:
+        db.rollback()
+        print(f"大会作成エラー: {e}")
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """アプリケーションのライフサイクル管理"""
@@ -49,6 +100,7 @@ async def lifespan(app: FastAPI):
     init_db()
     print("データベース初期化完了")
     create_default_admin()
+    create_default_tournament()
     yield
     # 終了時の処理
     print("浦和カップ API サーバー終了")
@@ -60,7 +112,6 @@ app = FastAPI(
     description="さいたま市招待高校サッカーフェスティバル浦和カップの運営管理API",
     version="1.0.0",
     lifespan=lifespan,
-    redirect_slashes=False,  # スラッシュリダイレクトを無効化（CORS問題回避）
 )
 
 # CORS設定
