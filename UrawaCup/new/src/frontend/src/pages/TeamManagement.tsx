@@ -1,12 +1,25 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import api from '@/core/http';
-import { Team } from '@shared/types';
+import { teamsApi } from '@/lib/api';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import { Modal } from '@/components/ui/Modal';
 import toast from 'react-hot-toast';
-import { useImportTeamsCsv } from '@/features/teams/hooks';
 import { useAppStore } from '@/stores/appStore';
+
+// Team type for this component
+interface Team {
+  id: number;
+  name: string;
+  short_name?: string;
+  group_id?: string;
+  groupId?: string;
+  team_type?: string;
+  teamType?: string;
+  is_venue_host?: boolean;
+  isVenueHost?: boolean;
+  tournament_id: number;
+  group_order?: number;
+}
 
 // タブの定義
 const GROUP_TABS = ['全チーム', 'Aグループ', 'Bグループ', 'Cグループ', 'Dグループ'] as const;
@@ -33,8 +46,6 @@ function TeamManagement() {
   const [bulkTeamType, setBulkTeamType] = useState<'invited' | 'local'>('invited');
   const [saving, setSaving] = useState(false);
   const [updatingTeamId, setUpdatingTeamId] = useState<number | null>(null);
-  const csvFileInputRef = useRef<HTMLInputElement>(null);
-  const importCsvMutation = useImportTeamsCsv();
 
   // appStoreから現在のトーナメントIDを取得
   const { currentTournament } = useAppStore();
@@ -44,10 +55,11 @@ function TeamManagement() {
     const fetchTeams = async () => {
       try {
         setLoading(true);
-        const response = await api.get<{ teams: Team[]; total: number }>(`/teams/?tournament_id=${tournamentId}`);
-        setTeams(response.data.teams);
+        const response = await teamsApi.getAll(tournamentId);
+        setTeams(response.teams as Team[]);
       } catch (e) {
-        console.error(e);
+        console.error('チーム取得エラー:', e);
+        toast.error('チームデータの取得に失敗しました');
       } finally {
         setLoading(false);
       }
@@ -66,8 +78,8 @@ function TeamManagement() {
   const handleInlineUpdate = async (teamId: number, field: string, value: string | boolean | null) => {
     setUpdatingTeamId(teamId);
     try {
-      const { data } = await api.patch<Team>(`/teams/${teamId}`, { [field]: value });
-      setTeams(prev => prev.map(t => t.id === teamId ? data : t));
+      const data = await teamsApi.update(teamId, { [field]: value });
+      setTeams(prev => prev.map(t => t.id === teamId ? data as Team : t));
       toast.success('更新しました');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '更新に失敗しました');
@@ -93,13 +105,13 @@ function TeamManagement() {
     if (!selectedTeam) return;
     setSaving(true);
     try {
-      const { data } = await api.patch<Team>(`/teams/${selectedTeam.id}`, {
+      const data = await teamsApi.update(selectedTeam.id, {
         name: editForm.name,
-        groupId: editForm.groupId || null,
-        teamType: editForm.teamType,
-        isVenueHost: editForm.isVenueHost,
+        group_id: editForm.groupId || null,
+        team_type: editForm.teamType,
+        is_venue_host: editForm.isVenueHost,
       });
-      setTeams(prev => prev.map(t => t.id === selectedTeam.id ? data : t));
+      setTeams(prev => prev.map(t => t.id === selectedTeam.id ? data as Team : t));
       setShowEditModal(false);
       toast.success('チーム情報を更新しました');
     } catch (error) {
@@ -118,14 +130,14 @@ function TeamManagement() {
     }
     setSaving(true);
     try {
-      const { data } = await api.post<Team>('/teams/', {
+      const data = await teamsApi.create({
         name: addForm.name,
-        tournamentId: tournamentId,
-        groupId: addForm.groupId || null,
-        teamType: addForm.teamType,
-        isVenueHost: addForm.isVenueHost,
+        tournament_id: tournamentId,
+        group_id: addForm.groupId || null,
+        team_type: addForm.teamType,
+        is_venue_host: addForm.isVenueHost,
       });
-      setTeams(prev => [...prev, data]);
+      setTeams(prev => [...prev, data as Team]);
       setShowAddModal(false);
       setAddForm({ name: '', groupId: '', teamType: 'invited', isVenueHost: false });
       toast.success('チームを追加しました');
@@ -137,26 +149,9 @@ function TeamManagement() {
     }
   };
 
-  // CSVインポート処理
-  const handleCsvImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const result = await importCsvMutation.mutateAsync({ tournamentId, file });
-      toast.success(`${result.imported}チームをインポートしました`);
-      // チーム一覧を再取得
-      const response = await api.get<{ teams: Team[]; total: number }>(`/teams/?tournament_id=${tournamentId}`);
-      setTeams(response.data.teams);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'インポートに失敗しました';
-      toast.error(message);
-    } finally {
-      // ファイル入力をリセット
-      if (csvFileInputRef.current) {
-        csvFileInputRef.current.value = '';
-      }
-    }
+  // CSVインポート処理（Supabaseでは未サポート - 一括登録を使用）
+  const handleCsvImport = async (_event: React.ChangeEvent<HTMLInputElement>) => {
+    toast.error('CSVインポートは現在サポートされていません。一括登録を使用してください。');
   };
 
   // 一括登録処理
@@ -183,13 +178,13 @@ function TeamManagement() {
       const name = shortName;
 
       try {
-        await api.post<Team>('/teams/', {
+        await teamsApi.create({
           name,
-          shortName,
-          tournamentId: tournamentId,
-          groupId: groupId && ['A', 'B', 'C', 'D'].includes(groupId) ? groupId : null,
-          teamType: bulkTeamType,
-          isVenueHost: false,
+          short_name: shortName,
+          tournament_id: tournamentId,
+          group_id: groupId && ['A', 'B', 'C', 'D'].includes(groupId) ? groupId : null,
+          team_type: bulkTeamType,
+          is_venue_host: false,
         });
         successCount++;
       } catch (error) {
@@ -198,8 +193,8 @@ function TeamManagement() {
     }
 
     // チーム一覧を再取得
-    const response = await api.get<{ teams: Team[]; total: number }>(`/teams/?tournament_id=${tournamentId}`);
-    setTeams(response.data.teams);
+    const response = await teamsApi.getAll(tournamentId);
+    setTeams(response.teams as Team[]);
 
     if (successCount > 0) {
       toast.success(`${successCount}チームを登録しました`);
