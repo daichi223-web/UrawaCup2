@@ -41,7 +41,7 @@ from services.player_import_service import (
 router = APIRouter()
 
 
-@router.get("/", response_model=PlayerList)
+@router.get("/")
 def get_players(
     team_id: Optional[int] = Query(None, description="チームIDでフィルタ"),
     tournament_id: Optional[int] = Query(None, description="大会IDでフィルタ"),
@@ -68,15 +68,26 @@ def get_players(
             .all()
         )
 
-        return PlayerList(players=players, total=total)
+        # 手動で辞書に変換してデバッグ
+        player_list = []
+        for p in players:
+            player_list.append({
+                "id": p.id,
+                "teamId": p.team_id,
+                "number": p.number,
+                "name": p.name,
+                "nameKana": p.name_kana,
+                "grade": p.grade,
+                "position": p.position,
+                "isActive": p.is_active,
+            })
+
+        return {"players": player_list, "total": total}
     except Exception as e:
         print(f"=== Players Route Error ===")
         print(f"Error: {e}")
         print(f"Traceback:\n{traceback.format_exc()}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": str(e), "type": type(e).__name__}
-        )
+        return {"error": str(e), "type": type(e).__name__}
 
 
 @router.get("/suggest", response_model=List[PlayerSuggestion])
