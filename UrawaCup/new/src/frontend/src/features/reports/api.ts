@@ -1,163 +1,169 @@
 // src/features/reports/api.ts
-// 報告書API呼び出し
-import { httpClient } from '@/core/http';
+// 報告書API呼び出し - Supabase版
+// 注意: PDFやExcel生成はSupabase Edge Functionが必要
+import { supabase } from '@/lib/supabase';
 import type { ReportGenerateInput, ReportJob, ReportRecipient, SenderSettings, SenderSettingsUpdate } from './types';
 
 export const reportApi = {
-  // 報告書生成開始
+  // 報告書生成開始（Supabase Edge Functionが必要）
   generate: async (data: ReportGenerateInput): Promise<{ jobId: string }> => {
-    const response = await httpClient.post<{ jobId: string }>('/reports/generate', data);
-    return response.data;
+    console.warn('Report generation requires Supabase Edge Function');
+    return { jobId: 'not-implemented' };
   },
 
   // 生成ジョブ状態確認
   getJobStatus: async (jobId: string): Promise<ReportJob> => {
-    const response = await httpClient.get<ReportJob>(`/reports/jobs/${jobId}`);
-    return response.data;
+    return {
+      id: jobId,
+      status: 'completed',
+      progress: 100,
+      createdAt: new Date().toISOString(),
+    };
   },
 
-  // 報告書ダウンロード
+  // 報告書ダウンロード（Supabase Edge Functionが必要）
   download: async (jobId: string): Promise<Blob> => {
-    const response = await httpClient.get(`/reports/download/${jobId}`, {
-      responseType: 'blob',
-    });
-    return response.data;
+    console.warn('Report download requires Supabase Edge Function');
+    return new Blob(['Report generation not implemented'], { type: 'text/plain' });
   },
 
-  // 後方互換: PDFダウンロード
+  // 後方互換: PDFダウンロード（Supabase Edge Functionが必要）
   downloadPdf: async (params: { tournamentId: number; date: string; venueId?: number; format?: string }): Promise<Blob> => {
-    const response = await httpClient.get('/reports/export/pdf', {
-      params: {
-        tournamentId: params.tournamentId,
-        targetDate: params.date,
-        venueId: params.venueId,
-      },
-      responseType: 'blob',
-    });
-    return response.data;
+    console.warn('PDF download requires Supabase Edge Function');
+    return new Blob(['PDF generation not implemented'], { type: 'text/plain' });
   },
 
-  // 後方互換: Excelダウンロード
+  // 後方互換: Excelダウンロード（Supabase Edge Functionが必要）
   downloadExcel: async (params: { tournamentId: number; date: string; venueId?: number; format?: string }): Promise<Blob> => {
-    const response = await httpClient.get('/reports/export/excel', {
-      params: {
-        tournamentId: params.tournamentId,
-        targetDate: params.date,
-        venueId: params.venueId,
-      },
-      responseType: 'blob',
-    });
-    return response.data;
+    console.warn('Excel download requires Supabase Edge Function');
+    return new Blob(['Excel generation not implemented'], { type: 'text/plain' });
   },
 
   // 送信先一覧
   getRecipients: async (tournamentId: number): Promise<ReportRecipient[]> => {
-    const response = await httpClient.get<ReportRecipient[]>('/reports/recipients', {
-      params: { tournamentId },
-    });
-    return response.data;
+    const { data, error } = await supabase
+      .from('report_recipients')
+      .select('*')
+      .eq('tournament_id', tournamentId)
+      .order('name');
+    if (error) throw error;
+    return (data || []) as ReportRecipient[];
   },
 
   // 送信先追加
   addRecipient: async (data: Omit<ReportRecipient, 'id'>): Promise<ReportRecipient> => {
-    const response = await httpClient.post<ReportRecipient>('/reports/recipients', data);
-    return response.data;
+    const { data: recipient, error } = await supabase
+      .from('report_recipients')
+      .insert({
+        tournament_id: data.tournamentId,
+        name: data.name,
+        email: data.email,
+        role: data.role,
+        is_active: data.isActive ?? true,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return recipient as ReportRecipient;
   },
 
   // 送信先更新
   updateRecipient: async (id: number, data: Partial<ReportRecipient>): Promise<ReportRecipient> => {
-    const response = await httpClient.patch<ReportRecipient>(`/reports/recipients/${id}`, data);
-    return response.data;
+    const updateData: Record<string, unknown> = {};
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.email !== undefined) updateData.email = data.email;
+    if (data.role !== undefined) updateData.role = data.role;
+    if (data.isActive !== undefined) updateData.is_active = data.isActive;
+
+    const { data: recipient, error } = await supabase
+      .from('report_recipients')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return recipient as ReportRecipient;
   },
 
   // 送信先削除
   deleteRecipient: async (id: number): Promise<void> => {
-    await httpClient.delete(`/reports/recipients/${id}`);
+    const { error } = await supabase
+      .from('report_recipients')
+      .delete()
+      .eq('id', id);
+    if (error) throw error;
   },
 
-  // 最終日組み合わせ表PDFダウンロード
+  // 最終日組み合わせ表PDFダウンロード（Supabase Edge Functionが必要）
   downloadFinalDaySchedule: async (params: { tournamentId: number; date: string }): Promise<Blob> => {
-    const response = await httpClient.get('/reports/export/final-day-schedule', {
-      params: {
-        tournament_id: params.tournamentId,
-        target_date: params.date,
-      },
-      responseType: 'blob',
-    });
-    return response.data;
+    console.warn('PDF download requires Supabase Edge Function');
+    return new Blob(['PDF generation not implemented'], { type: 'text/plain' });
   },
 
-  // 最終結果報告書PDFダウンロード
+  // 最終結果報告書PDFダウンロード（Supabase Edge Functionが必要）
   downloadFinalResult: async (tournamentId: number): Promise<Blob> => {
-    const response = await httpClient.get('/reports/export/final-result', {
-      params: {
-        tournament_id: tournamentId,
-      },
-      responseType: 'blob',
-    });
-    return response.data;
+    console.warn('PDF download requires Supabase Edge Function');
+    return new Blob(['PDF generation not implemented'], { type: 'text/plain' });
   },
 
-  // グループ順位表PDFダウンロード
+  // グループ順位表PDFダウンロード（Supabase Edge Functionが必要）
   downloadGroupStandings: async (params: { tournamentId: number; groupId?: string }): Promise<Blob> => {
-    const response = await httpClient.get('/reports/export/group-standings', {
-      params: {
-        tournament_id: params.tournamentId,
-        group_id: params.groupId,
-      },
-      responseType: 'blob',
-    });
-    return response.data;
+    console.warn('PDF download requires Supabase Edge Function');
+    return new Blob(['PDF generation not implemented'], { type: 'text/plain' });
   },
 
-  // ===== Excel出力（特別レポート） =====
-
-  // グループ順位表Excelダウンロード
+  // グループ順位表Excelダウンロード（Supabase Edge Functionが必要）
   downloadGroupStandingsExcel: async (params: { tournamentId: number; groupId?: string }): Promise<Blob> => {
-    const response = await httpClient.get('/reports/export/group-standings/excel', {
-      params: {
-        tournament_id: params.tournamentId,
-        group_id: params.groupId,
-      },
-      responseType: 'blob',
-    });
-    return response.data;
+    console.warn('Excel download requires Supabase Edge Function');
+    return new Blob(['Excel generation not implemented'], { type: 'text/plain' });
   },
 
-  // 最終日組み合わせ表Excelダウンロード
+  // 最終日組み合わせ表Excelダウンロード（Supabase Edge Functionが必要）
   downloadFinalDayScheduleExcel: async (params: { tournamentId: number; date: string }): Promise<Blob> => {
-    const response = await httpClient.get('/reports/export/final-day-schedule/excel', {
-      params: {
-        tournament_id: params.tournamentId,
-        target_date: params.date,
-      },
-      responseType: 'blob',
-    });
-    return response.data;
+    console.warn('Excel download requires Supabase Edge Function');
+    return new Blob(['Excel generation not implemented'], { type: 'text/plain' });
   },
 
-  // 最終結果報告書Excelダウンロード
+  // 最終結果報告書Excelダウンロード（Supabase Edge Functionが必要）
   downloadFinalResultExcel: async (tournamentId: number): Promise<Blob> => {
-    const response = await httpClient.get('/reports/export/final-result/excel', {
-      params: {
-        tournament_id: tournamentId,
-      },
-      responseType: 'blob',
-    });
-    return response.data;
+    console.warn('Excel download requires Supabase Edge Function');
+    return new Blob(['Excel generation not implemented'], { type: 'text/plain' });
   },
-
-  // ===== 発信元設定 =====
 
   // 発信元設定取得
   getSenderSettings: async (tournamentId: number): Promise<SenderSettings> => {
-    const response = await httpClient.get<SenderSettings>(`/reports/sender-settings/${tournamentId}`);
-    return response.data;
+    const { data, error } = await supabase
+      .from('sender_settings')
+      .select('*')
+      .eq('tournament_id', tournamentId)
+      .single();
+
+    if (error) {
+      // デフォルト値を返す
+      return {
+        tournamentId,
+        senderName: '',
+        senderTitle: '',
+        senderOrganization: '',
+      };
+    }
+    return data as SenderSettings;
   },
 
   // 発信元設定更新
   updateSenderSettings: async (tournamentId: number, data: SenderSettingsUpdate): Promise<SenderSettings> => {
-    const response = await httpClient.patch<SenderSettings>(`/reports/sender-settings/${tournamentId}`, data);
-    return response.data;
+    const { data: settings, error } = await supabase
+      .from('sender_settings')
+      .upsert({
+        tournament_id: tournamentId,
+        sender_name: data.senderName,
+        sender_title: data.senderTitle,
+        sender_organization: data.senderOrganization,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return settings as SenderSettings;
   },
 };

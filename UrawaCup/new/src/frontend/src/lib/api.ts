@@ -1,0 +1,567 @@
+/**
+ * Supabase API Layer
+ * FastAPIバックエンドの代わりにSupabaseを直接使用
+ */
+
+import { supabase } from './supabase'
+import type {
+  Tournament, Team, Match, Goal, Standing,
+  Venue, Player, Profile, Group
+} from './database.types'
+
+// ============================================
+// Tournaments API
+// ============================================
+
+export const tournamentsApi = {
+  async getAll() {
+    const { data, error } = await supabase
+      .from('tournaments')
+      .select('*')
+      .order('year', { ascending: false })
+    if (error) throw error
+    return data
+  },
+
+  async getById(id: number) {
+    const { data, error } = await supabase
+      .from('tournaments')
+      .select('*')
+      .eq('id', id)
+      .single()
+    if (error) throw error
+    return data
+  },
+
+  async update(id: number, updates: Partial<Tournament>) {
+    const { data, error } = await supabase
+      .from('tournaments')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  },
+}
+
+// ============================================
+// Teams API
+// ============================================
+
+export const teamsApi = {
+  async getAll(tournamentId: number) {
+    const { data, error } = await supabase
+      .from('teams')
+      .select('*')
+      .eq('tournament_id', tournamentId)
+      .order('group_id')
+      .order('group_order')
+    if (error) throw error
+    return { teams: data, total: data.length }
+  },
+
+  async getById(id: number) {
+    const { data, error } = await supabase
+      .from('teams')
+      .select('*')
+      .eq('id', id)
+      .single()
+    if (error) throw error
+    return data
+  },
+
+  async create(team: Omit<Team, 'id' | 'created_at' | 'updated_at'>) {
+    const { data, error } = await supabase
+      .from('teams')
+      .insert(team)
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  },
+
+  async update(id: number, updates: Partial<Team>) {
+    const { data, error } = await supabase
+      .from('teams')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  },
+
+  async delete(id: number) {
+    const { error } = await supabase
+      .from('teams')
+      .delete()
+      .eq('id', id)
+    if (error) throw error
+  },
+}
+
+// ============================================
+// Matches API
+// ============================================
+
+export const matchesApi = {
+  async getAll(tournamentId: number, options?: { groupId?: string; status?: string }) {
+    let query = supabase
+      .from('matches')
+      .select(`
+        *,
+        home_team:teams!matches_home_team_id_fkey(*),
+        away_team:teams!matches_away_team_id_fkey(*),
+        venue:venues(*)
+      `)
+      .eq('tournament_id', tournamentId)
+      .order('match_date')
+      .order('match_time')
+
+    if (options?.groupId) {
+      query = query.eq('group_id', options.groupId)
+    }
+    if (options?.status) {
+      query = query.eq('status', options.status)
+    }
+
+    const { data, error } = await query
+    if (error) throw error
+    return { matches: data, total: data.length }
+  },
+
+  async getById(id: number) {
+    const { data, error } = await supabase
+      .from('matches')
+      .select(`
+        *,
+        home_team:teams!matches_home_team_id_fkey(*),
+        away_team:teams!matches_away_team_id_fkey(*),
+        venue:venues(*),
+        goals(*)
+      `)
+      .eq('id', id)
+      .single()
+    if (error) throw error
+    return data
+  },
+
+  async update(id: number, updates: Partial<Match>) {
+    const { data, error } = await supabase
+      .from('matches')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  },
+
+  async updateScore(id: number, score: {
+    home_score_half1?: number
+    home_score_half2?: number
+    away_score_half1?: number
+    away_score_half2?: number
+    status?: string
+  }) {
+    const home_total = (score.home_score_half1 ?? 0) + (score.home_score_half2 ?? 0)
+    const away_total = (score.away_score_half1 ?? 0) + (score.away_score_half2 ?? 0)
+
+    let result: 'home_win' | 'away_win' | 'draw' | null = null
+    if (score.status === 'completed') {
+      if (home_total > away_total) result = 'home_win'
+      else if (home_total < away_total) result = 'away_win'
+      else result = 'draw'
+    }
+
+    const { data, error } = await supabase
+      .from('matches')
+      .update({
+        ...score,
+        home_score_total: home_total,
+        away_score_total: away_total,
+        result,
+      })
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  },
+}
+
+// ============================================
+// Goals API
+// ============================================
+
+export const goalsApi = {
+  async getByMatch(matchId: number) {
+    const { data, error } = await supabase
+      .from('goals')
+      .select('*, team:teams(*), player:players(*)')
+      .eq('match_id', matchId)
+      .order('half')
+      .order('minute')
+    if (error) throw error
+    return data
+  },
+
+  async create(goal: Omit<Goal, 'id' | 'created_at' | 'updated_at'>) {
+    const { data, error } = await supabase
+      .from('goals')
+      .insert(goal)
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  },
+
+  async delete(id: number) {
+    const { error } = await supabase
+      .from('goals')
+      .delete()
+      .eq('id', id)
+    if (error) throw error
+  },
+}
+
+// ============================================
+// Standings API
+// ============================================
+
+export const standingsApi = {
+  async getByGroup(tournamentId: number) {
+    const { data: groups, error: groupsError } = await supabase
+      .from('groups')
+      .select('*')
+      .eq('tournament_id', tournamentId)
+      .order('id')
+
+    if (groupsError) throw groupsError
+
+    const result = []
+    for (const group of groups) {
+      const { data: standings, error } = await supabase
+        .from('standings')
+        .select('*, team:teams(*)')
+        .eq('tournament_id', tournamentId)
+        .eq('group_id', group.id)
+        .order('rank')
+
+      if (error) throw error
+      result.push({
+        groupId: group.id,
+        groupName: group.name,
+        standings: standings || []
+      })
+    }
+    return result
+  },
+
+  async getTopScorers(tournamentId: number, limit = 20) {
+    const { data, error } = await supabase
+      .from('goals')
+      .select(`
+        player_name,
+        team_id,
+        team:teams(name)
+      `)
+      .eq('is_own_goal', false)
+
+    if (error) throw error
+
+    // 得点者ごとに集計
+    const scorerMap = new Map<string, { name: string; teamId: number; teamName: string; goals: number }>()
+
+    for (const goal of data) {
+      const key = `${goal.team_id}-${goal.player_name}`
+      if (scorerMap.has(key)) {
+        scorerMap.get(key)!.goals++
+      } else {
+        scorerMap.set(key, {
+          name: goal.player_name,
+          teamId: goal.team_id,
+          teamName: (goal.team as any)?.name || '',
+          goals: 1
+        })
+      }
+    }
+
+    // ソートしてランキング作成
+    const sorted = Array.from(scorerMap.values())
+      .sort((a, b) => b.goals - a.goals)
+      .slice(0, limit)
+      .map((scorer, index) => ({
+        rank: index + 1,
+        scorerName: scorer.name,
+        teamId: scorer.teamId,
+        teamName: scorer.teamName,
+        goals: scorer.goals
+      }))
+
+    return sorted
+  },
+
+  async recalculate(tournamentId: number, groupId: string) {
+    // 該当グループの試合を取得
+    const { data: matches, error: matchError } = await supabase
+      .from('matches')
+      .select('*')
+      .eq('tournament_id', tournamentId)
+      .eq('group_id', groupId)
+      .eq('status', 'completed')
+      .eq('stage', 'preliminary')
+
+    if (matchError) throw matchError
+
+    // 該当グループのチームを取得
+    const { data: teams, error: teamError } = await supabase
+      .from('teams')
+      .select('*')
+      .eq('tournament_id', tournamentId)
+      .eq('group_id', groupId)
+
+    if (teamError) throw teamError
+
+    // チームごとの成績を計算
+    const stats = new Map<number, {
+      played: number; won: number; drawn: number; lost: number;
+      goals_for: number; goals_against: number;
+    }>()
+
+    for (const team of teams) {
+      stats.set(team.id, { played: 0, won: 0, drawn: 0, lost: 0, goals_for: 0, goals_against: 0 })
+    }
+
+    for (const match of matches) {
+      if (!match.home_team_id || !match.away_team_id) continue
+
+      const homeStats = stats.get(match.home_team_id)
+      const awayStats = stats.get(match.away_team_id)
+      if (!homeStats || !awayStats) continue
+
+      homeStats.played++
+      awayStats.played++
+      homeStats.goals_for += match.home_score_total || 0
+      homeStats.goals_against += match.away_score_total || 0
+      awayStats.goals_for += match.away_score_total || 0
+      awayStats.goals_against += match.home_score_total || 0
+
+      if (match.result === 'home_win') {
+        homeStats.won++
+        awayStats.lost++
+      } else if (match.result === 'away_win') {
+        awayStats.won++
+        homeStats.lost++
+      } else {
+        homeStats.drawn++
+        awayStats.drawn++
+      }
+    }
+
+    // 順位を計算してDBに保存
+    const standings = Array.from(stats.entries()).map(([teamId, s]) => ({
+      tournament_id: tournamentId,
+      group_id: groupId,
+      team_id: teamId,
+      played: s.played,
+      won: s.won,
+      drawn: s.drawn,
+      lost: s.lost,
+      goals_for: s.goals_for,
+      goals_against: s.goals_against,
+      goal_difference: s.goals_for - s.goals_against,
+      points: s.won * 3 + s.drawn,
+      rank: 0
+    }))
+
+    // ソートして順位付け
+    standings.sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points
+      if (b.goal_difference !== a.goal_difference) return b.goal_difference - a.goal_difference
+      return b.goals_for - a.goals_for
+    })
+
+    standings.forEach((s, i) => { s.rank = i + 1 })
+
+    // 既存の順位を削除して再挿入
+    await supabase
+      .from('standings')
+      .delete()
+      .eq('tournament_id', tournamentId)
+      .eq('group_id', groupId)
+
+    const { error } = await supabase
+      .from('standings')
+      .insert(standings)
+
+    if (error) throw error
+    return standings
+  }
+}
+
+// ============================================
+// Venues API
+// ============================================
+
+export const venuesApi = {
+  async getAll(tournamentId: number) {
+    const { data, error } = await supabase
+      .from('venues')
+      .select('*')
+      .eq('tournament_id', tournamentId)
+      .order('name')
+    if (error) throw error
+    return data
+  },
+
+  async create(venue: Omit<Venue, 'id' | 'created_at' | 'updated_at'>) {
+    const { data, error } = await supabase
+      .from('venues')
+      .insert(venue)
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  },
+}
+
+// ============================================
+// Groups API
+// ============================================
+
+export const groupsApi = {
+  async getAll(tournamentId: number) {
+    const { data, error } = await supabase
+      .from('groups')
+      .select('*')
+      .eq('tournament_id', tournamentId)
+      .order('id')
+    if (error) throw error
+    return data
+  },
+}
+
+// ============================================
+// Players API
+// ============================================
+
+export const playersApi = {
+  async getByTeam(teamId: number) {
+    const { data, error } = await supabase
+      .from('players')
+      .select('*')
+      .eq('team_id', teamId)
+      .order('number')
+    if (error) throw error
+    return data
+  },
+
+  async create(player: Omit<Player, 'id' | 'created_at' | 'updated_at'>) {
+    const { data, error } = await supabase
+      .from('players')
+      .insert(player)
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  },
+}
+
+// ============================================
+// Auth API
+// ============================================
+
+export const authApi = {
+  async signIn(email: string, password: string) {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+    if (error) throw error
+    return data
+  },
+
+  async signOut() {
+    const { error } = await supabase.auth.signOut()
+    if (error) throw error
+  },
+
+  async getSession() {
+    const { data, error } = await supabase.auth.getSession()
+    if (error) throw error
+    return data.session
+  },
+
+  async getProfile(userId: string) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single()
+    if (error) throw error
+    return data
+  },
+
+  onAuthStateChange(callback: (event: string, session: any) => void) {
+    return supabase.auth.onAuthStateChange(callback)
+  },
+}
+
+// ============================================
+// Realtime Subscriptions
+// ============================================
+
+export const realtimeApi = {
+  subscribeToMatches(tournamentId: number, callback: (payload: any) => void) {
+    return supabase
+      .channel('matches-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'matches',
+          filter: `tournament_id=eq.${tournamentId}`,
+        },
+        callback
+      )
+      .subscribe()
+  },
+
+  subscribeToGoals(callback: (payload: any) => void) {
+    return supabase
+      .channel('goals-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'goals',
+        },
+        callback
+      )
+      .subscribe()
+  },
+
+  subscribeToStandings(tournamentId: number, callback: (payload: any) => void) {
+    return supabase
+      .channel('standings-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'standings',
+          filter: `tournament_id=eq.${tournamentId}`,
+        },
+        callback
+      )
+      .subscribe()
+  },
+
+  unsubscribe(channel: any) {
+    supabase.removeChannel(channel)
+  },
+}

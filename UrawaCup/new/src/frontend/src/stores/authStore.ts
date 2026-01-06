@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import type { User, UserRole, LoginRequest, LoginResponse } from '@shared/types'
-import api from '@/core/http'
+import type { User, UserRole, LoginRequest } from '@shared/types'
+import { supabase } from '@/lib/supabase'
+import { authApi } from '@/lib/api'
 
 /**
  * 認証状態の型定義
@@ -27,7 +28,7 @@ interface AuthState {
 }
 
 /**
- * 認証状態管理ストア
+ * 認証状態管理ストア - Supabase Auth版
  * - ログイン/ログアウト
  * - 認証トークン管理
  * - 権限チェック
@@ -43,23 +44,50 @@ export const useAuthStore = create<AuthState>()(
       error: null,
 
       /**
-       * ログイン処理
+       * ログイン処理 - Supabase Auth
        */
       login: async (credentials: LoginRequest): Promise<boolean> => {
         set({ isLoading: true, error: null })
         try {
-          const { data } = await api.post<LoginResponse>('/auth/login', credentials)
+          // Supabase Authでログイン（usernameをemailとして使用）
+          const email = credentials.username.includes('@')
+            ? credentials.username
+            : `${credentials.username}@urawa-cup.local`
+
+          const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+            email,
+            password: credentials.password,
+          })
+
+          if (authError) throw authError
+
+          if (!authData.user || !authData.session) {
+            throw new Error('認証に失敗しました')
+          }
+
+          // プロフィール情報を取得
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', authData.user.id)
+            .single()
+
+          const user: User = {
+            id: authData.user.id as any,
+            username: profile?.username || authData.user.email?.split('@')[0] || 'user',
+            email: authData.user.email || '',
+            role: (profile?.role as UserRole) || 'viewer',
+            name: profile?.name || authData.user.email?.split('@')[0] || 'User',
+            venueId: profile?.venue_id,
+          }
 
           set({
-            user: data.user,
-            accessToken: data.accessToken,
+            user,
+            accessToken: authData.session.access_token,
             isAuthenticated: true,
             isLoading: false,
             error: null,
           })
-
-          // APIクライアントにトークンを設定
-          api.defaults.headers.common['Authorization'] = `Bearer ${data.accessToken}`
 
           return true
         } catch (error) {
@@ -78,9 +106,12 @@ export const useAuthStore = create<AuthState>()(
       /**
        * ログアウト処理
        */
-      logout: () => {
-        // APIクライアントからトークンを削除
-        delete api.defaults.headers.common['Authorization']
+      logout: async () => {
+        try {
+          await supabase.auth.signOut()
+        } catch (error) {
+          console.error('ログアウトエラー:', error)
+        }
 
         set({
           user: null,
@@ -92,36 +123,50 @@ export const useAuthStore = create<AuthState>()(
       },
 
       /**
-       * 認証状態の確認（トークン検証）
-       * 開発モードではトークンがない場合に自動的に管理者としてログイン
+       * 認証状態の確認（セッション検証）
+       * 開発モードではセッションがない場合に自動的に管理者としてログイン
        */
       checkAuth: async () => {
-        const { accessToken, login } = get()
+        const { login } = get()
 
-        // トークンがある場合は検証
-        if (accessToken) {
-          set({ isLoading: true })
-          try {
-            // トークンをヘッダーに設定
-            api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`
+        set({ isLoading: true })
+        try {
+          // Supabaseのセッションを確認
+          const { data: { session } } = await supabase.auth.getSession()
 
-            // ユーザー情報を取得して検証
-            const { data } = await api.get<User>('/auth/me')
+          if (session?.user) {
+            // プロフィール情報を取得
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', session.user.id)
+              .single()
+
+            const user: User = {
+              id: session.user.id as any,
+              username: profile?.username || session.user.email?.split('@')[0] || 'user',
+              email: session.user.email || '',
+              role: (profile?.role as UserRole) || 'viewer',
+              name: profile?.name || session.user.email?.split('@')[0] || 'User',
+              venueId: profile?.venue_id,
+            }
+
             set({
-              user: data,
+              user,
+              accessToken: session.access_token,
               isAuthenticated: true,
               isLoading: false,
             })
             return
-          } catch {
-            // トークンが無効な場合は続行（自動ログインを試みる）
           }
+        } catch (error) {
+          console.error('セッション確認エラー:', error)
         }
 
         // 開発モード: 自動的に管理者としてログイン
         if (import.meta.env.DEV) {
           console.log('開発モード: 管理者として自動ログインを試行...')
-          const success = await login({ username: 'admin', password: 'admin123' })
+          const success = await login({ username: 'admin@urawa-cup.local', password: 'admin123' })
           if (success) {
             console.log('自動ログイン成功')
             return
@@ -186,3 +231,35 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 )
+
+// Supabase認証状態変更のリスナー
+supabase.auth.onAuthStateChange(async (event, session) => {
+  const store = useAuthStore.getState()
+
+  if (event === 'SIGNED_OUT') {
+    store.logout()
+  } else if (event === 'SIGNED_IN' && session?.user) {
+    // セッション更新時にストアも更新
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', session.user.id)
+      .single()
+
+    const user: User = {
+      id: session.user.id as any,
+      username: profile?.username || session.user.email?.split('@')[0] || 'user',
+      email: session.user.email || '',
+      role: (profile?.role as UserRole) || 'viewer',
+      name: profile?.name || session.user.email?.split('@')[0] || 'User',
+      venueId: profile?.venue_id,
+    }
+
+    useAuthStore.setState({
+      user,
+      accessToken: session.access_token,
+      isAuthenticated: true,
+      isLoading: false,
+    })
+  }
+})
