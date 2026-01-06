@@ -30,7 +30,7 @@ function TeamManagement() {
   const [editForm, setEditForm] = useState({ name: '', groupId: '', teamType: 'invited', isVenueHost: false });
   const [addForm, setAddForm] = useState({ name: '', groupId: '', teamType: 'invited', isVenueHost: false });
   const [bulkText, setBulkText] = useState('');
-  const [bulkGroupId, setBulkGroupId] = useState('');
+  const [bulkTeamType, setBulkTeamType] = useState<'invited' | 'local'>('invited');
   const [saving, setSaving] = useState(false);
   const csvFileInputRef = useRef<HTMLInputElement>(null);
   const importCsvMutation = useImportTeamsCsv();
@@ -148,7 +148,7 @@ function TeamManagement() {
   const handleBulkAdd = async () => {
     const lines = bulkText.split('\n').map(line => line.trim()).filter(line => line);
     if (lines.length === 0) {
-      toast.error('チーム名を入力してください');
+      toast.error('略称を入力してください');
       return;
     }
 
@@ -157,14 +157,15 @@ function TeamManagement() {
     const errors: string[] = [];
 
     for (const line of lines) {
-      // タブ区切りの場合: チーム名\t略称\tグループ\t区分
-      const parts = line.split('\t');
-      const name = parts[0]?.trim();
-      const shortName = parts[1]?.trim() || null;
-      const groupId = parts[2]?.trim().toUpperCase() || bulkGroupId || null;
-      const teamType = parts[3]?.trim().toLowerCase() === 'local' ? 'local' : 'invited';
+      // タブ/スペース区切り: 略称 グループ
+      const parts = line.split(/[\t\s]+/);
+      const shortName = parts[0]?.trim();
+      const groupId = parts[1]?.trim().toUpperCase() || null;
 
-      if (!name) continue;
+      if (!shortName) continue;
+
+      // 略称をチーム名としても使用
+      const name = shortName;
 
       try {
         await api.post<Team>('/teams/', {
@@ -172,12 +173,12 @@ function TeamManagement() {
           shortName,
           tournamentId: tournamentId,
           groupId: groupId && ['A', 'B', 'C', 'D'].includes(groupId) ? groupId : null,
-          teamType,
+          teamType: bulkTeamType,
           isVenueHost: false,
         });
         successCount++;
       } catch (error) {
-        errors.push(name);
+        errors.push(shortName);
       }
     }
 
@@ -194,7 +195,7 @@ function TeamManagement() {
 
     setShowBulkModal(false);
     setBulkText('');
-    setBulkGroupId('');
+    setBulkTeamType('invited');
     setSaving(false);
   };
 
@@ -496,25 +497,18 @@ function TeamManagement() {
       >
         <div className="space-y-4">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
-            <p className="font-medium mb-1">入力形式:</p>
-            <ul className="list-disc list-inside space-y-1 text-xs">
-              <li>1行に1チーム名を入力</li>
-              <li>Excelからコピペ可（タブ区切り）</li>
-              <li>タブ区切り: チーム名 → 略称 → グループ(A/B/C/D) → 区分(local/invited)</li>
-            </ul>
+            <p className="font-medium mb-1">入力形式（1行1チーム）:</p>
+            <p className="text-xs">略称（スペースまたはタブ）グループ</p>
           </div>
           <div>
-            <label className="form-label">デフォルトグループ（省略可）</label>
+            <label className="form-label">チーム区分</label>
             <select
               className="form-input"
-              value={bulkGroupId}
-              onChange={(e) => setBulkGroupId(e.target.value)}
+              value={bulkTeamType}
+              onChange={(e) => setBulkTeamType(e.target.value as 'invited' | 'local')}
             >
-              <option value="">グループ未設定</option>
-              <option value="A">Aグループ</option>
-              <option value="B">Bグループ</option>
-              <option value="C">Cグループ</option>
-              <option value="D">Dグループ</option>
+              <option value="invited">招待チーム</option>
+              <option value="local">地元チーム</option>
             </select>
           </div>
           <div>
@@ -523,13 +517,12 @@ function TeamManagement() {
               className="form-input min-h-[200px] font-mono text-sm"
               value={bulkText}
               onChange={(e) => setBulkText(e.target.value)}
-              placeholder={`浦和南高校
-市立浦和高校
-前橋育英高校
-
-または（Excelからコピペ）:
-浦和南高校\t浦和南\tA\tlocal
-市立浦和高校\t市浦和\tB\tlocal`}
+              placeholder={`浦和南  A
+市浦和  B
+前橋育  A
+青森山田  B
+流経柏  C
+静岡学園  D`}
             />
             <p className="text-xs text-gray-500 mt-1">
               {bulkText.split('\n').filter(l => l.trim()).length}チーム検出
@@ -541,7 +534,7 @@ function TeamManagement() {
               onClick={() => {
                 setShowBulkModal(false);
                 setBulkText('');
-                setBulkGroupId('');
+                setBulkTeamType('invited');
               }}
             >
               キャンセル
