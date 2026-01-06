@@ -50,44 +50,44 @@ def get_players(
     db: Session = Depends(get_db),
 ):
     """選手一覧を取得"""
-    import traceback
-    try:
-        query = db.query(Player)
+    query = db.query(Player)
 
-        if team_id:
-            query = query.filter(Player.team_id == team_id)
-        elif tournament_id:
-            # 大会IDでフィルタする場合はチームテーブルをjoin
-            query = query.join(Team).filter(Team.tournament_id == tournament_id)
+    if team_id:
+        query = query.filter(Player.team_id == team_id)
+    elif tournament_id:
+        # 大会IDでフィルタする場合はチームテーブルをjoin
+        query = query.join(Team).filter(Team.tournament_id == tournament_id)
 
-        total = query.count()
-        players = (
-            query.order_by(Player.team_id, Player.number)
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
+    total = query.count()
+    players = (
+        query.order_by(Player.team_id, Player.number)
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
-        # 手動で辞書に変換してデバッグ
-        player_list = []
-        for p in players:
-            player_list.append({
-                "id": p.id,
-                "teamId": p.team_id,
-                "number": p.number,
-                "name": p.name,
-                "nameKana": p.name_kana,
-                "grade": p.grade,
-                "position": p.position,
-                "isActive": p.is_active,
-            })
+    # 手動で辞書に変換（Pydanticシリアライズ問題を回避）
+    player_list = []
+    for p in players:
+        player_list.append({
+            "id": p.id,
+            "teamId": p.team_id,
+            "number": p.number,
+            "name": p.name,
+            "nameKana": p.name_kana,
+            "nameNormalized": p.name_normalized,
+            "grade": p.grade,
+            "position": p.position,
+            "height": p.height,
+            "previousTeam": p.previous_team,
+            "isCaptain": p.is_captain,
+            "isActive": p.is_active,
+            "notes": p.notes,
+            "createdAt": p.created_at.isoformat() if p.created_at else None,
+            "updatedAt": p.updated_at.isoformat() if p.updated_at else None,
+        })
 
-        return {"players": player_list, "total": total}
-    except Exception as e:
-        print(f"=== Players Route Error ===")
-        print(f"Error: {e}")
-        print(f"Traceback:\n{traceback.format_exc()}")
-        return {"error": str(e), "type": type(e).__name__}
+    return {"players": player_list, "total": total}
 
 
 @router.get("/suggest", response_model=List[PlayerSuggestion])
