@@ -78,7 +78,16 @@ function TeamManagement() {
   const handleInlineUpdate = async (teamId: number, field: string, value: string | boolean | null) => {
     setUpdatingTeamId(teamId);
     try {
-      const data = await teamsApi.update(teamId, { [field]: value });
+      // camelCase to snake_case変換
+      const fieldMap: Record<string, string> = {
+        groupId: 'group_id',
+        teamType: 'team_type',
+        isVenueHost: 'is_venue_host',
+        shortName: 'short_name',
+        groupOrder: 'group_order',
+      };
+      const snakeField = fieldMap[field] || field;
+      const data = await teamsApi.update(teamId, { [snakeField]: value });
       setTeams(prev => prev.map(t => t.id === teamId ? data as Team : t));
       toast.success('更新しました');
     } catch (error) {
