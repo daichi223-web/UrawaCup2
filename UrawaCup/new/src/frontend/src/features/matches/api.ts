@@ -172,11 +172,29 @@ export const matchApi = {
 
   // 試合削除
   delete: async (id: number): Promise<void> => {
+    // 削除前に試合情報を取得（順位表再計算のため）
+    const { data: match } = await supabase
+      .from('matches')
+      .select('tournament_id, group_id, stage')
+      .eq('id', id)
+      .single();
+
+    // 試合削除（goals は CASCADE で自動削除）
     const { error } = await supabase
       .from('matches')
       .delete()
       .eq('id', id);
     if (error) throw error;
+
+    // 予選リーグの試合なら順位表を再計算
+    if (match?.stage === 'preliminary' && match.group_id) {
+      try {
+        console.log('[Standings] Recalculating after match deletion for group:', match.group_id);
+        await standingsApi.recalculate(match.tournament_id, match.group_id);
+      } catch (err) {
+        console.error('[Standings] Failed to recalculate after match deletion:', err);
+      }
+    }
   },
 
   // 日程自動生成（予選リーグ）- Supabase Edge Functionが必要
