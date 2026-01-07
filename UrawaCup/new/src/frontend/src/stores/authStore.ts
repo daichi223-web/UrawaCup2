@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { User, UserRole, LoginRequest } from '@shared/types'
 import { supabase } from '@/lib/supabase'
-import { authApi } from '@/lib/api'
 
 /**
  * 認証状態の型定義
@@ -98,7 +97,7 @@ export const useAuthStore = create<AuthState>()(
             username: profile?.username || authData.user.email?.split('@')[0] || 'user',
             email: authData.user.email || '',
             role: (profile?.role as UserRole) || 'viewer',
-            name: profile?.name || authData.user.email?.split('@')[0] || 'User',
+            name: profile?.display_name || authData.user.email?.split('@')[0] || 'User',
             venueId: profile?.venue_id,
           }
 
@@ -165,7 +164,7 @@ export const useAuthStore = create<AuthState>()(
               username: profile?.username || session.user.email?.split('@')[0] || 'user',
               email: session.user.email || '',
               role: (profile?.role as UserRole) || 'viewer',
-              name: profile?.name || session.user.email?.split('@')[0] || 'User',
+              name: profile?.display_name || session.user.email?.split('@')[0] || 'User',
               venueId: profile?.venue_id,
             }
 
@@ -259,7 +258,7 @@ supabase.auth.onAuthStateChange(async (event, session) => {
       username: profile?.username || session.user.email?.split('@')[0] || 'user',
       email: session.user.email || '',
       role: (profile?.role as UserRole) || 'viewer',
-      name: profile?.name || session.user.email?.split('@')[0] || 'User',
+      name: profile?.display_name || session.user.email?.split('@')[0] || 'User',
       venueId: profile?.venue_id,
     }
 

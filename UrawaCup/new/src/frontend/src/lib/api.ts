@@ -436,16 +436,17 @@ export const standingsApi = {
   },
 
   async recalculate(tournamentId: number, groupId: string) {
-    // 該当グループの試合を取得
+    // 該当グループの完了済み試合を取得（stageは問わない）
     const { data: matches, error: matchError } = await supabase
       .from('matches')
       .select('*')
       .eq('tournament_id', tournamentId)
       .eq('group_id', groupId)
       .eq('status', 'completed')
-      .eq('stage', 'preliminary')
 
     if (matchError) throw matchError
+
+    console.log(`[Standings] Found ${matches?.length || 0} completed matches for group ${groupId}`)
 
     // 該当グループのチームを取得
     const { data: teams, error: teamError } = await supabase

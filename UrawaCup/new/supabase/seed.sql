@@ -89,7 +89,7 @@ INSERT INTO standings (tournament_id, group_id, team_id, points) VALUES
 (1, 'D', 24, 0);
 
 -- サンプル試合データ
-INSERT INTO matches (id, tournament_id, group_id, match_number, home_team_id, away_team_id, venue_id, match_date, match_time, status, home_score_total, away_score_total) VALUES
+INSERT INTO matches (id, tournament_id, group_id, match_order, home_team_id, away_team_id, venue_id, match_date, match_time, status, home_score_total, away_score_total) VALUES
 (1, 1, 'A', 1, 1, 2, 1, '2026-03-20', '09:30:00', 'completed', 2, 1),
 (2, 1, 'A', 2, 3, 4, 1, '2026-03-20', '10:45:00', 'completed', 0, 0),
 (3, 1, 'A', 3, 5, 6, 1, '2026-03-20', '12:00:00', 'completed', 3, 1),

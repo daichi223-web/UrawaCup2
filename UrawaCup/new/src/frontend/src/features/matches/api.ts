@@ -147,24 +147,24 @@ export const matchApi = {
         .eq('match_id', id);
     }
 
-    // スコア更新後に順位表を再計算（予選リーグの場合）
-    if (status === 'completed') {
-      try {
-        const { data: matchData } = await supabase
-          .from('matches')
-          .select('tournament_id, group_id, stage')
-          .eq('id', id)
-          .single();
+    // スコア更新後に順位表を再計算（group_idがあれば常に実行）
+    try {
+      const { data: matchData } = await supabase
+        .from('matches')
+        .select('tournament_id, group_id, stage')
+        .eq('id', id)
+        .single();
 
-        if (matchData?.stage === 'preliminary' && matchData.group_id) {
-          console.log('[Standings] Recalculating standings for group:', matchData.group_id);
-          await standingsApi.recalculate(matchData.tournament_id, matchData.group_id);
-          console.log('[Standings] Standings recalculated successfully');
-        }
-      } catch (err) {
-        console.error('[Standings] Failed to recalculate standings:', err);
-        // 順位表の再計算に失敗しても試合結果は保存済みなのでエラーは投げない
+      if (matchData?.group_id) {
+        console.log('[Standings] Recalculating standings for group:', matchData.group_id);
+        await standingsApi.recalculate(matchData.tournament_id, matchData.group_id);
+        console.log('[Standings] Standings recalculated successfully');
+      } else {
+        console.log('[Standings] No group_id, skipping recalculation');
       }
+    } catch (err) {
+      console.error('[Standings] Failed to recalculate standings:', err);
+      // 順位表の再計算に失敗しても試合結果は保存済みなのでエラーは投げない
     }
 
     return match as Match;
@@ -218,10 +218,12 @@ export const matchApi = {
 
   // 承認
   approve: async (id: number): Promise<Match> => {
+    const { data: { user } } = await supabase.auth.getUser();
     const { data, error } = await supabase
       .from('matches')
       .update({
-        status: 'approved',
+        approval_status: 'approved',
+        approved_by: user?.id,
         approved_at: new Date().toISOString(),
       })
       .eq('id', id)
@@ -238,10 +240,12 @@ export const matchApi = {
 
   // 却下
   reject: async (id: number, reason: string): Promise<Match> => {
+    const { data: { user } } = await supabase.auth.getUser();
     const { data, error } = await supabase
       .from('matches')
       .update({
-        status: 'rejected',
+        approval_status: 'rejected',
+        approved_by: user?.id,
         rejection_reason: reason,
       })
       .eq('id', id)
@@ -256,11 +260,14 @@ export const matchApi = {
     return matchApi.reject(id, reason);
   },
 
-  // ロック取得（Supabaseでは簡易実装）
+  // ロック取得
   lock: async (id: number): Promise<MatchLock> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not authenticated');
+
     const { data, error } = await supabase
       .from('matches')
-      .update({ locked_by: 'current_user', locked_at: new Date().toISOString() })
+      .update({ locked_by: user.id, locked_at: new Date().toISOString() })
       .eq('id', id)
       .select()
       .single();
