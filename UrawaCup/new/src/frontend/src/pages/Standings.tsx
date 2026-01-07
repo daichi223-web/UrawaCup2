@@ -245,16 +245,14 @@ function Standings() {
               <table className="table w-full">
                 <thead>
                   <tr className="text-xs uppercase bg-gray-50 border-b">
-                    <th className="px-4 py-3 text-left font-medium text-gray-500 w-12">順位</th>
+                    <th className="px-4 py-3 text-center font-bold text-gray-700 w-12">順位</th>
                     <th className="px-4 py-3 text-left font-medium text-gray-500">チーム</th>
-                    <th className="px-2 py-3 text-center font-medium text-gray-500 w-10">試</th>
                     <th className="px-2 py-3 text-center font-medium text-gray-500 w-10">勝</th>
-                    <th className="px-2 py-3 text-center font-medium text-gray-500 w-10">分</th>
                     <th className="px-2 py-3 text-center font-medium text-gray-500 w-10">敗</th>
-                    <th className="px-2 py-3 text-center font-medium text-gray-500 w-10">得</th>
-                    <th className="px-2 py-3 text-center font-medium text-gray-500 w-10">失</th>
-                    <th className="px-2 py-3 text-center font-medium text-gray-500 w-10">差</th>
-                    <th className="px-4 py-3 text-center font-bold text-gray-700 w-12 bg-gray-50">点</th>
+                    <th className="px-2 py-3 text-center font-medium text-gray-500 w-10">分</th>
+                    <th className="px-2 py-3 text-center font-medium text-gray-500 w-10">得点</th>
+                    <th className="px-2 py-3 text-center font-medium text-gray-500 w-10">失点</th>
+                    <th className="px-2 py-3 text-center font-medium text-gray-500 w-12">得失点差</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -265,7 +263,7 @@ function Standings() {
                         index < 2 ? 'bg-green-50/50' : '' // 上位2チームをハイライト
                       }`}
                     >
-                      <td className="px-4 py-3 font-semibold text-gray-900 border-r">
+                      <td className="px-4 py-3 text-center font-bold text-gray-900">
                         <span className={`${
                           standing.rank === 1 ? 'text-yellow-600' :
                           standing.rank === 2 ? 'text-gray-500' : ''
@@ -279,23 +277,19 @@ function Standings() {
                           <span className="ml-2 text-xs text-blue-500" title={standing.rankReason}>ℹ️</span>
                         )}
                       </td>
-                      <td className="px-2 py-3 text-center text-gray-600">{standing.played}</td>
                       <td className="px-2 py-3 text-center text-gray-600">{standing.won}</td>
-                      <td className="px-2 py-3 text-center text-gray-600">{standing.drawn}</td>
                       <td className="px-2 py-3 text-center text-gray-600">{standing.lost}</td>
+                      <td className="px-2 py-3 text-center text-gray-600">{standing.drawn}</td>
                       <td className="px-2 py-3 text-center text-gray-600">{standing.goalsFor}</td>
                       <td className="px-2 py-3 text-center text-gray-600">{standing.goalsAgainst}</td>
                       <td className="px-2 py-3 text-center font-medium text-gray-900">
                         {standing.goalDifference > 0 ? `+${standing.goalDifference}` : standing.goalDifference}
                       </td>
-                      <td className="px-4 py-3 text-center font-bold text-blue-600 bg-blue-50">
-                        {standing.points}
-                      </td>
                     </tr>
                   ))}
                   {groupData.standings.length === 0 && (
                     <tr>
-                      <td colSpan={10} className="text-center py-8 text-gray-400">
+                      <td colSpan={8} className="text-center py-8 text-gray-400">
                         データがありません
                       </td>
                     </tr>

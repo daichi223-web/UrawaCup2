@@ -94,33 +94,35 @@ export default function PublicStandings() {
                 <table className="w-full text-sm">
                     <thead className="bg-gray-50 text-gray-500 border-b border-gray-100">
                         <tr>
-                            <th className="py-3 pl-3 text-left w-10">#</th>
-                            <th className="py-3 text-left">Team</th>
-                            <th className="py-3 text-center w-8">Pt</th>
-                            <th className="py-3 text-center w-8">GD</th>
-                            <th className="py-3 text-center w-8 text-gray-400 font-normal text-xs">Pld</th>
+                            <th className="py-3 pl-3 text-center w-10">順位</th>
+                            <th className="py-3 text-left">チーム</th>
+                            <th className="py-3 text-center w-8">勝</th>
+                            <th className="py-3 text-center w-8">敗</th>
+                            <th className="py-3 text-center w-8">分</th>
+                            <th className="py-3 text-center w-8">得</th>
+                            <th className="py-3 text-center w-8">失</th>
+                            <th className="py-3 text-center w-10">差</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                         {currentGroupStandings.length === 0 ? (
-                            <tr><td colSpan={5} className="text-center py-8 text-gray-400">データなし</td></tr>
+                            <tr><td colSpan={8} className="text-center py-8 text-gray-400">データなし</td></tr>
                         ) : (
                             currentGroupStandings.map((row, index) => (
-                                <tr key={index} className="hover:bg-red-50 transition-colors">
-                                    <td className="py-3 pl-3 font-bold text-gray-400">
+                                <tr key={index} className={`hover:bg-red-50 transition-colors ${index < 2 ? 'bg-green-50/50' : ''}`}>
+                                    <td className="py-3 pl-3 text-center font-bold text-gray-700">
                                         {row.rank || index + 1}
                                     </td>
                                     <td className="py-3 font-bold text-gray-800">
                                         {row.team?.name ?? `Team ${row.team_id}`}
                                     </td>
-                                    <td className="py-3 text-center font-black text-gray-900 bg-gray-50">
-                                        {row.points}
-                                    </td>
-                                    <td className="py-3 text-center font-medium text-gray-600">
+                                    <td className="py-3 text-center text-gray-600">{row.won}</td>
+                                    <td className="py-3 text-center text-gray-600">{row.lost}</td>
+                                    <td className="py-3 text-center text-gray-600">{row.drawn}</td>
+                                    <td className="py-3 text-center text-gray-600">{row.goals_for}</td>
+                                    <td className="py-3 text-center text-gray-600">{row.goals_against}</td>
+                                    <td className="py-3 text-center font-medium text-gray-900">
                                         {row.goal_difference > 0 ? `+${row.goal_difference}` : row.goal_difference}
-                                    </td>
-                                    <td className="py-3 text-center text-gray-400 text-xs">
-                                        {row.played}
                                     </td>
                                 </tr>
                             ))
