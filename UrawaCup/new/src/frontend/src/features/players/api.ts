@@ -2,6 +2,7 @@
 // 選手API呼び出し - Supabase版
 import { playersApi } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
+import * as XLSX from 'xlsx';
 import type {
   Player,
   CreatePlayerInput,
@@ -149,18 +150,70 @@ export const playerApi = {
     return new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8' });
   },
 
-  // Excelインポートプレビュー（Supabaseでは簡易実装）
+  // Excelインポートプレビュー
   previewExcelImport: async (teamId: number, file: File): Promise<ImportPreviewResult> => {
-    console.warn('Excel preview requires xlsx library');
-    return {
-      players: [],
-      staff: [],
-      warnings: ['Excel import preview not implemented'],
-      errors: [],
-    };
+    const arrayBuffer = await file.arrayBuffer();
+    const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+
+    const players: Array<{ number: number; name: string; position?: string }> = [];
+    const staff: Array<{ role: string; name: string }> = [];
+    const warnings: string[] = [];
+    const errors: string[] = [];
+
+    // 選手シートを探す（"選手", "players", 最初のシート）
+    const playerSheetName = workbook.SheetNames.find(
+      name => name.toLowerCase().includes('選手') || name.toLowerCase().includes('player')
+    ) || workbook.SheetNames[0];
+
+    if (playerSheetName) {
+      const sheet = workbook.Sheets[playerSheetName];
+      const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+
+      for (let i = 0; i < data.length; i++) {
+        const row = data[i];
+        // カラム名の候補を探す
+        const number = row['番号'] || row['背番号'] || row['No'] || row['number'] || 0;
+        const name = row['氏名'] || row['名前'] || row['選手名'] || row['name'] || '';
+        const position = row['ポジション'] || row['position'] || row['POS'] || '';
+
+        if (name) {
+          players.push({
+            number: typeof number === 'number' ? number : parseInt(String(number)) || 0,
+            name: String(name),
+            position: position ? String(position) : undefined,
+          });
+        } else {
+          warnings.push(`行 ${i + 2}: 名前が空のためスキップ`);
+        }
+      }
+    }
+
+    // スタッフシートを探す
+    const staffSheetName = workbook.SheetNames.find(
+      name => name.toLowerCase().includes('スタッフ') || name.toLowerCase().includes('staff')
+    );
+
+    if (staffSheetName) {
+      const sheet = workbook.Sheets[staffSheetName];
+      const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+
+      for (const row of data) {
+        const role = row['役職'] || row['role'] || '';
+        const name = row['氏名'] || row['名前'] || row['name'] || '';
+
+        if (name && role) {
+          staff.push({
+            role: String(role),
+            name: String(name),
+          });
+        }
+      }
+    }
+
+    return { players, staff, warnings, errors };
   },
 
-  // Excelインポート実行（Supabaseでは簡易実装）
+  // Excelインポート実行
   importExcel: async (
     teamId: number,
     file: File,
@@ -171,11 +224,75 @@ export const playerApi = {
       skipWarnings?: boolean;
     } = {}
   ): Promise<ImportResult> => {
-    console.warn('Excel import requires xlsx library');
-    return {
-      playersImported: 0,
-      staffImported: 0,
-      warnings: ['Excel import not implemented'],
-    };
+    const preview = await playerApi.previewExcelImport(teamId, file);
+    const warnings: string[] = [...preview.warnings];
+
+    if (options.replaceExisting) {
+      // 既存選手を削除
+      await supabase.from('players').delete().eq('team_id', teamId);
+    }
+
+    let playersImported = 0;
+    for (const player of preview.players) {
+      const { error } = await supabase
+        .from('players')
+        .insert({
+          team_id: teamId,
+          number: player.number,
+          name: player.name,
+          position: player.position || null,
+        });
+
+      if (!error) {
+        playersImported++;
+      } else {
+        warnings.push(`選手 ${player.name} のインポートに失敗: ${error.message}`);
+      }
+    }
+
+    let staffImported = 0;
+    if (options.importStaff && preview.staff.length > 0) {
+      for (const s of preview.staff) {
+        const { error } = await supabase
+          .from('staff')
+          .insert({
+            team_id: teamId,
+            role: s.role,
+            name: s.name,
+          });
+
+        if (!error) {
+          staffImported++;
+        }
+      }
+    }
+
+    return { playersImported, staffImported, warnings };
+  },
+
+  // Excelエクスポート
+  exportExcel: async (teamId: number, teamName: string): Promise<Blob> => {
+    const { data: players, error } = await supabase
+      .from('players')
+      .select('*')
+      .eq('team_id', teamId)
+      .order('number');
+
+    if (error) throw error;
+
+    const wsData = [
+      ['番号', '氏名', 'ポジション'],
+      ...(players || []).map(p => [p.number, p.name, p.position || ''])
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '選手');
+
+    // カラム幅を設定
+    ws['!cols'] = [{ wch: 8 }, { wch: 20 }, { wch: 12 }];
+
+    const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   },
 };
