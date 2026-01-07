@@ -8,6 +8,21 @@ import type {
   Tournament, Team, Match, Goal, Standing,
   Venue, Player, Profile, Group
 } from './database.types'
+import {
+  normalizeTeamName,
+  normalizePlayerName,
+  normalizeVenueName,
+  normalizeJerseyNumber,
+} from '@/utils/normalize'
+import { getErrorMessage } from '@/utils/errorHandler'
+
+/**
+ * Supabaseエラーを日本語メッセージ付きエラーに変換
+ */
+function handleSupabaseError(error: unknown): never {
+  const message = getErrorMessage(error)
+  throw new Error(message)
+}
 
 // ============================================
 // Tournaments API
@@ -19,7 +34,7 @@ export const tournamentsApi = {
       .from('tournaments')
       .select('*')
       .order('year', { ascending: false })
-    if (error) throw error
+    if (error) handleSupabaseError(error)
     return data
   },
 
@@ -29,7 +44,7 @@ export const tournamentsApi = {
       .select('*')
       .eq('id', id)
       .single()
-    if (error) throw error
+    if (error) handleSupabaseError(error)
     return data
   },
 
@@ -40,7 +55,7 @@ export const tournamentsApi = {
       .eq('id', id)
       .select()
       .single()
-    if (error) throw error
+    if (error) handleSupabaseError(error)
     return data
   },
 }
@@ -57,7 +72,7 @@ export const teamsApi = {
       .eq('tournament_id', tournamentId)
       .order('group_id')
       .order('group_order')
-    if (error) throw error
+    if (error) handleSupabaseError(error)
     return { teams: data, total: data.length }
   },
 
@@ -67,28 +82,42 @@ export const teamsApi = {
       .select('*')
       .eq('id', id)
       .single()
-    if (error) throw error
+    if (error) handleSupabaseError(error)
     return data
   },
 
   async create(team: Omit<Team, 'id' | 'created_at' | 'updated_at'>) {
+    // 全角半角正規化
+    const normalizedTeam = {
+      ...team,
+      name: team.name ? normalizeTeamName(team.name) : team.name,
+      short_name: team.short_name ? normalizeTeamName(team.short_name) : team.short_name,
+    }
     const { data, error } = await supabase
       .from('teams')
-      .insert(team)
+      .insert(normalizedTeam)
       .select()
       .single()
-    if (error) throw error
+    if (error) handleSupabaseError(error)
     return data
   },
 
   async update(id: number, updates: Partial<Team>) {
+    // 全角半角正規化
+    const normalizedUpdates = { ...updates }
+    if (normalizedUpdates.name) {
+      normalizedUpdates.name = normalizeTeamName(normalizedUpdates.name)
+    }
+    if (normalizedUpdates.short_name) {
+      normalizedUpdates.short_name = normalizeTeamName(normalizedUpdates.short_name)
+    }
     const { data, error } = await supabase
       .from('teams')
-      .update(updates)
+      .update(normalizedUpdates)
       .eq('id', id)
       .select()
       .single()
-    if (error) throw error
+    if (error) handleSupabaseError(error)
     return data
   },
 
@@ -97,7 +126,7 @@ export const teamsApi = {
       .from('teams')
       .delete()
       .eq('id', id)
-    if (error) throw error
+    if (error) handleSupabaseError(error)
   },
 }
 
@@ -127,7 +156,7 @@ export const matchesApi = {
     }
 
     const { data, error } = await query
-    if (error) throw error
+    if (error) handleSupabaseError(error)
     return { matches: data, total: data.length }
   },
 
@@ -143,7 +172,7 @@ export const matchesApi = {
       `)
       .eq('id', id)
       .single()
-    if (error) throw error
+    if (error) handleSupabaseError(error)
     return data
   },
 
@@ -154,7 +183,7 @@ export const matchesApi = {
       .eq('id', id)
       .select()
       .single()
-    if (error) throw error
+    if (error) handleSupabaseError(error)
     return data
   },
 
@@ -186,7 +215,7 @@ export const matchesApi = {
       .eq('id', id)
       .select()
       .single()
-    if (error) throw error
+    if (error) handleSupabaseError(error)
     return data
   },
 }
@@ -203,7 +232,7 @@ export const goalsApi = {
       .eq('match_id', matchId)
       .order('half')
       .order('minute')
-    if (error) throw error
+    if (error) handleSupabaseError(error)
     return data
   },
 
@@ -213,7 +242,7 @@ export const goalsApi = {
       .insert(goal)
       .select()
       .single()
-    if (error) throw error
+    if (error) handleSupabaseError(error)
     return data
   },
 
@@ -222,7 +251,7 @@ export const goalsApi = {
       .from('goals')
       .delete()
       .eq('id', id)
-    if (error) throw error
+    if (error) handleSupabaseError(error)
   },
 }
 
@@ -249,7 +278,7 @@ export const standingsApi = {
         .eq('group_id', group.id)
         .order('rank')
 
-      if (error) throw error
+      if (error) handleSupabaseError(error)
       result.push({
         groupId: group.id,
         groupName: group.name,
@@ -269,7 +298,7 @@ export const standingsApi = {
       `)
       .eq('is_own_goal', false)
 
-    if (error) throw error
+    if (error) handleSupabaseError(error)
 
     // 得点者ごとに集計
     const scorerMap = new Map<string, { name: string; teamId: number; teamName: string; goals: number }>()
@@ -396,7 +425,7 @@ export const standingsApi = {
       .from('standings')
       .insert(standings)
 
-    if (error) throw error
+    if (error) handleSupabaseError(error)
     return standings
   }
 }
@@ -412,17 +441,42 @@ export const venuesApi = {
       .select('*')
       .eq('tournament_id', tournamentId)
       .order('name')
-    if (error) throw error
+    if (error) handleSupabaseError(error)
     return data
   },
 
   async create(venue: Omit<Venue, 'id' | 'created_at' | 'updated_at'>) {
+    // 全角半角正規化
+    const normalizedVenue = {
+      ...venue,
+      name: venue.name ? normalizeVenueName(venue.name) : venue.name,
+      address: venue.address ? normalizeVenueName(venue.address) : venue.address,
+    }
     const { data, error } = await supabase
       .from('venues')
-      .insert(venue)
+      .insert(normalizedVenue)
       .select()
       .single()
-    if (error) throw error
+    if (error) handleSupabaseError(error)
+    return data
+  },
+
+  async update(id: number, updates: Partial<Venue>) {
+    // 全角半角正規化
+    const normalizedUpdates = { ...updates }
+    if (normalizedUpdates.name) {
+      normalizedUpdates.name = normalizeVenueName(normalizedUpdates.name)
+    }
+    if (normalizedUpdates.address) {
+      normalizedUpdates.address = normalizeVenueName(normalizedUpdates.address)
+    }
+    const { data, error } = await supabase
+      .from('venues')
+      .update(normalizedUpdates)
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) handleSupabaseError(error)
     return data
   },
 }
@@ -438,7 +492,7 @@ export const groupsApi = {
       .select('*')
       .eq('tournament_id', tournamentId)
       .order('id')
-    if (error) throw error
+    if (error) handleSupabaseError(error)
     return data
   },
 }
@@ -454,17 +508,44 @@ export const playersApi = {
       .select('*')
       .eq('team_id', teamId)
       .order('number')
-    if (error) throw error
+    if (error) handleSupabaseError(error)
     return data
   },
 
   async create(player: Omit<Player, 'id' | 'created_at' | 'updated_at'>) {
+    // 全角半角正規化
+    const normalizedPlayer = {
+      ...player,
+      name: player.name ? normalizePlayerName(player.name) : player.name,
+      number: typeof player.number === 'string'
+        ? parseInt(normalizeJerseyNumber(player.number), 10) || player.number
+        : player.number,
+    }
     const { data, error } = await supabase
       .from('players')
-      .insert(player)
+      .insert(normalizedPlayer)
       .select()
       .single()
-    if (error) throw error
+    if (error) handleSupabaseError(error)
+    return data
+  },
+
+  async update(id: number, updates: Partial<Player>) {
+    // 全角半角正規化
+    const normalizedUpdates = { ...updates }
+    if (normalizedUpdates.name) {
+      normalizedUpdates.name = normalizePlayerName(normalizedUpdates.name)
+    }
+    if (normalizedUpdates.number !== undefined && typeof normalizedUpdates.number === 'string') {
+      normalizedUpdates.number = parseInt(normalizeJerseyNumber(normalizedUpdates.number as string), 10) || normalizedUpdates.number
+    }
+    const { data, error } = await supabase
+      .from('players')
+      .update(normalizedUpdates)
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) handleSupabaseError(error)
     return data
   },
 }
@@ -479,18 +560,18 @@ export const authApi = {
       email,
       password,
     })
-    if (error) throw error
+    if (error) handleSupabaseError(error)
     return data
   },
 
   async signOut() {
     const { error } = await supabase.auth.signOut()
-    if (error) throw error
+    if (error) handleSupabaseError(error)
   },
 
   async getSession() {
     const { data, error } = await supabase.auth.getSession()
-    if (error) throw error
+    if (error) handleSupabaseError(error)
     return data.session
   },
 
@@ -500,7 +581,7 @@ export const authApi = {
       .select('*')
       .eq('id', userId)
       .single()
-    if (error) throw error
+    if (error) handleSupabaseError(error)
     return data
   },
 

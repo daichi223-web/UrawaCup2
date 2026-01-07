@@ -3,6 +3,11 @@
 import { playersApi } from '@/lib/api';
 import { supabase } from '@/lib/supabase';
 import * as XLSX from 'xlsx';
+import {
+  normalizePlayerName,
+  normalizeJerseyNumber,
+  normalizeForSearch,
+} from '@/utils/normalize';
 import type {
   Player,
   CreatePlayerInput,
@@ -74,11 +79,13 @@ export const playerApi = {
 
   // 選手サジェスト（得点者入力用）
   suggest: async (teamId: number, query: string): Promise<PlayerSuggestion[]> => {
+    // 検索クエリを正規化
+    const normalizedQuery = normalizeForSearch(query);
     const { data, error } = await supabase
       .from('players')
       .select('id, number, name')
       .eq('team_id', teamId)
-      .ilike('name', `%${query}%`)
+      .ilike('name', `%${normalizedQuery}%`)
       .limit(10);
 
     if (error) throw error;
@@ -110,15 +117,18 @@ export const playerApi = {
       const parts = line.split(',').map(s => s.trim());
       if (parts.length >= 2) {
         const [numberStr, name, position] = parts;
-        const number = parseInt(numberStr);
+        // 全角半角正規化
+        const normalizedNumber = parseInt(normalizeJerseyNumber(numberStr), 10);
+        const normalizedName = normalizePlayerName(name);
+        const normalizedPosition = position ? normalizePlayerName(position) : null;
 
         const { data, error } = await supabase
           .from('players')
           .insert({
             team_id: teamId,
-            number: isNaN(number) ? 0 : number,
-            name,
-            position: position || null,
+            number: isNaN(normalizedNumber) ? 0 : normalizedNumber,
+            name: normalizedName,
+            position: normalizedPosition,
           })
           .select()
           .single();
@@ -234,13 +244,17 @@ export const playerApi = {
 
     let playersImported = 0;
     for (const player of preview.players) {
+      // 全角半角正規化
+      const normalizedName = normalizePlayerName(player.name);
+      const normalizedPosition = player.position ? normalizePlayerName(player.position) : null;
+
       const { error } = await supabase
         .from('players')
         .insert({
           team_id: teamId,
           number: player.number,
-          name: player.name,
-          position: player.position || null,
+          name: normalizedName,
+          position: normalizedPosition,
         });
 
       if (!error) {
