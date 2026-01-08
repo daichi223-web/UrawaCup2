@@ -1,0 +1,4 @@
+#!/bin/bash
+export VITE_SUPABASE_URL="https://ulpdvtxqtwtmpzcnkelz.supabase.co"
+export VITE_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVscGR2dHhxdHd0bXB6Y25rZWx6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3MDI3NjQsImV4cCI6MjA4MzI3ODc2NH0.9LoNuSbJVHWOn5D6mDNEkWTGVIgLEKL7pd5kUZ879Ek"
+npm run build

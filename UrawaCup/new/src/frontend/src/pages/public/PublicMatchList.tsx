@@ -28,11 +28,27 @@ export default function PublicMatchList() {
     const tournamentId = 1;
 
     useEffect(() => {
+        let mounted = true;
+        const abortController = new AbortController();
+        const timeoutId = setTimeout(() => abortController.abort(), 15000); // 15秒でタイムアウト
+
         const fetchMatches = async () => {
             try {
                 setLoading(true);
                 setError(null);
-                const data = await matchesApi.getAll(tournamentId);
+
+                // タイムアウト付きでフェッチ
+                // matchesApi.getAll自体はsignalを受け取らないかもしれないが、
+                // 非同期処理が長引いた場合にUI側で打ち切るためのロジック
+                const fetchPromise = matchesApi.getAll(tournamentId);
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('データの取得がタイムアウトしました')), 10000)
+                );
+
+                const data: any = await Promise.race([fetchPromise, timeoutPromise]);
+
+                if (!mounted) return;
+
                 // Sort by date and time
                 const sorted = (data.matches as MatchData[]).sort((a, b) => {
                     const aTime = `${a.match_date} ${a.match_time}`;
@@ -40,22 +56,52 @@ export default function PublicMatchList() {
                     return new Date(aTime).getTime() - new Date(bTime).getTime();
                 });
                 setMatches(sorted);
-            } catch (err) {
+            } catch (err: any) {
+                if (!mounted) return;
                 console.error("Failed to load matches", err);
-                setError("試合データの読み込みに失敗しました");
+                const errorMessage = err.message || "試合データの読み込みに失敗しました";
+                setError(`${errorMessage} (Reload to try again)`);
             } finally {
-                setLoading(false);
+                if (mounted) {
+                    setLoading(false);
+                    clearTimeout(timeoutId);
+                }
             }
         };
         fetchMatches();
+
+        return () => {
+            mounted = false;
+            clearTimeout(timeoutId);
+            abortController.abort();
+        };
     }, [tournamentId]);
 
-    if (loading) return <div className="flex justify-center py-10"><LoadingSpinner /></div>;
+    if (loading) return (
+        <div className="flex flex-col items-center justify-center py-20 space-y-4">
+            <LoadingSpinner />
+            <p className="text-gray-500 text-sm">データを読み込んでいます...</p>
+        </div>
+    );
 
     if (error) {
         return (
-            <div className="text-center py-10 text-red-600">
-                {error}
+            <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+                <div className="bg-red-50 text-red-600 p-4 rounded-lg max-w-sm w-full">
+                    <p className="font-bold mb-2">エラーが発生しました</p>
+                    <p className="text-sm mb-4">{error}</p>
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="bg-red-600 text-white px-4 py-2 rounded text-sm hover:bg-red-700 transition-colors"
+                    >
+                        再読み込み
+                    </button>
+                    <div className="mt-4 pt-4 border-t border-red-200 text-left text-xs font-mono bg-white p-2 rounded">
+                        <p>Debug Info:</p>
+                        <p>Tournament ID: {tournamentId}</p>
+                        <p>Supabase Configured: {import.meta.env.VITE_SUPABASE_URL ? 'Yes' : 'No'}</p>
+                    </div>
+                </div>
             </div>
         );
     }

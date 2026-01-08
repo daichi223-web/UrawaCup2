@@ -1,8 +1,7 @@
 # Vercel
 .vercel
 
-# Environment files with secrets
-.env.production
+# Environment files with secrets (keep .env.production for Vercel builds)
 .env.local
 .env.*.local
 

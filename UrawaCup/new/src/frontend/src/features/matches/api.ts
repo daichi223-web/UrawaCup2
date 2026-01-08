@@ -54,12 +54,67 @@ export const matchApi = {
     return data as Match[];
   },
 
-  // 後方互換: 試合一覧取得
+  // 後方互換: 試合一覧取得（フィルター対応）
   getMatches: async (params?: Record<string, unknown>): Promise<{ matches: MatchWithDetails[], total: number }> => {
-    const tournamentId = params?.tournamentId as number || 1;
-    const groupId = params?.groupId as string | undefined;
-    const result = await matchesApi.getAll(tournamentId, { groupId });
-    return result;
+    const tournamentId = params?.tournamentId as number || params?.tournament_id as number || 1;
+
+    let query = supabase
+      .from('matches')
+      .select(`
+        *,
+        home_team:teams!matches_home_team_id_fkey(*),
+        away_team:teams!matches_away_team_id_fkey(*),
+        venue:venues(*),
+        goals(*)
+      `)
+      .eq('tournament_id', tournamentId)
+      .order('match_date')
+      .order('match_time');
+
+    // フィルターを適用
+    if (params?.groupId || params?.group_id) {
+      query = query.eq('group_id', params.groupId || params.group_id);
+    }
+    if (params?.venueId || params?.venue_id) {
+      query = query.eq('venue_id', params.venueId || params.venue_id);
+    }
+    if (params?.matchDate || params?.match_date) {
+      query = query.eq('match_date', params.matchDate || params.match_date);
+    }
+    if (params?.status) {
+      query = query.eq('status', params.status);
+    }
+    if (params?.stage) {
+      query = query.eq('stage', params.stage);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    // snake_case to camelCase 変換
+    const matches: MatchWithDetails[] = (data || []).map((m: any) => ({
+      ...m,
+      matchDate: m.match_date,
+      matchTime: m.match_time,
+      matchOrder: m.match_number,
+      venueId: m.venue_id,
+      homeTeamId: m.home_team_id,
+      awayTeamId: m.away_team_id,
+      homeTeam: m.home_team,
+      awayTeam: m.away_team,
+      homeScoreTotal: m.home_score_total,
+      awayScoreTotal: m.away_score_total,
+      homeScoreHalf1: m.home_score_half1,
+      homeScoreHalf2: m.home_score_half2,
+      awayScoreHalf1: m.away_score_half1,
+      awayScoreHalf2: m.away_score_half2,
+      homePK: m.home_pk,
+      awayPK: m.away_pk,
+      hasPenaltyShootout: m.has_penalty_shootout,
+      goals: m.goals || [],
+    }));
+
+    return { matches, total: matches.length };
   },
 
   // 単一試合取得

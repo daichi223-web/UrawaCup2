@@ -100,17 +100,22 @@ export function useRealtimeUpdates(
             return;
           }
 
-          // React Queryのキャッシュを無効化
-          queryClient.invalidateQueries({ queryKey: ['matches'] });
-          queryClient.invalidateQueries({ queryKey: ['match', matchPayload.match_id] });
+          // React Queryのキャッシュを無効化（特定のクエリのみ、即時再取得しない）
+          queryClient.invalidateQueries({
+            queryKey: ['matches', matchPayload.tournament_id],
+            refetchType: 'none', // staleにするだけで即座に再取得しない
+          });
+          queryClient.invalidateQueries({
+            queryKey: ['match', matchPayload.match_id],
+            exact: true,
+          });
 
           // 順位表も更新（予選リーグの場合）
           if (matchPayload.group_id) {
             queryClient.invalidateQueries({
               queryKey: ['standings', matchPayload.tournament_id],
-            });
-            queryClient.invalidateQueries({
-              queryKey: ['standings', matchPayload.tournament_id, matchPayload.group_id],
+              exact: true,
+              refetchType: 'active', // アクティブなクエリのみ再取得
             });
           }
 
@@ -135,12 +140,11 @@ export function useRealtimeUpdates(
             return;
           }
 
-          // React Queryのキャッシュを無効化
+          // React Queryのキャッシュを無効化（アクティブなクエリのみ）
           queryClient.invalidateQueries({
             queryKey: ['standings', standingPayload.tournament_id],
-          });
-          queryClient.invalidateQueries({
-            queryKey: ['standings', standingPayload.tournament_id, standingPayload.group_id],
+            exact: true,
+            refetchType: 'active',
           });
 
           // 通知を表示
@@ -161,10 +165,16 @@ export function useRealtimeUpdates(
             return;
           }
 
-          // React Queryのキャッシュを無効化
-          queryClient.invalidateQueries({ queryKey: ['matches'] });
-          queryClient.invalidateQueries({ queryKey: ['match', approvalPayload.match_id] });
-          queryClient.invalidateQueries({ queryKey: ['pending-matches'] });
+          // React Queryのキャッシュを無効化（特定のクエリのみ）
+          queryClient.invalidateQueries({
+            queryKey: ['match', approvalPayload.match_id],
+            exact: true,
+          });
+          queryClient.invalidateQueries({
+            queryKey: ['pending-matches'],
+            exact: true,
+            refetchType: 'active',
+          });
 
           // 通知を表示
           if (showNotifications) {

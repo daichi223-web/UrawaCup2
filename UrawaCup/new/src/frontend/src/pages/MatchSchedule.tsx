@@ -6,12 +6,18 @@
 import { useState, useMemo, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { tournamentsApi, venuesApi, matchesApi } from '@/lib/api'
+import { tournamentsApi, venuesApi, matchesApi, teamsApi, standingsApi } from '@/lib/api'
+import { supabase } from '@/lib/supabase'
 import { useAppStore } from '@/stores/appStore'
 import FinalsBracket from '@/components/FinalsBracket'
 import DraggableMatchList from '@/components/DraggableMatchList'
 import { Modal } from '@/components/ui/Modal'
 import LoadingSpinner from '@/components/common/LoadingSpinner'
+import {
+  generatePreliminarySchedule,
+  generateFinalDaySchedule,
+  checkCoreApiHealth,
+} from '@/lib/scheduleGenerator'
 import type {
   MatchWithDetails,
   Venue,
@@ -180,27 +186,282 @@ function MatchSchedule() {
     )
   }, [allMatches])
 
-  // 予選リーグ日程生成（Supabase版では未サポート）
+  // 予選リーグ日程生成
   const generatePreliminaryMutation = useMutation({
     mutationFn: async () => {
-      toast.error('日程自動生成はSupabase版では未サポートです')
-      throw new Error('未サポート')
+      // Core API の接続確認
+      const isHealthy = await checkCoreApiHealth()
+      if (!isHealthy) {
+        throw new Error('日程生成サーバーに接続できません。サーバーが起動しているか確認してください。')
+      }
+
+      // チーム一覧を取得
+      const teams = await teamsApi.getAll(tournamentId)
+      const localTeams = teams.filter((t: any) => t.team_type === 'local' && t.group_id)
+      if (localTeams.length === 0) {
+        throw new Error('チームが登録されていません')
+      }
+
+      // 試合日を取得
+      const matchDate = tournament?.startDate || new Date().toISOString().split('T')[0]
+
+      // Core API を呼び出して日程を生成
+      const result = await generatePreliminarySchedule(
+        localTeams.map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          group: t.group_id,
+          rank: 0,
+        })),
+        venues.map(v => ({ id: v.id, name: v.name })),
+        matchDate,
+        '09:30'
+      )
+
+      if (!result.success || !result.matches) {
+        throw new Error('日程生成に失敗しました')
+      }
+
+      // 既存の予選試合を削除
+      await supabase
+        .from('matches')
+        .delete()
+        .eq('tournament_id', tournamentId)
+        .eq('stage', 'preliminary')
+
+      // 生成された試合を Supabase に保存
+      const matchesToInsert = result.matches.map((m, index) => ({
+        tournament_id: tournamentId,
+        group_id: m.groupId,
+        home_team_id: m.homeTeamId,
+        away_team_id: m.awayTeamId,
+        venue_id: m.venueId,
+        match_date: m.matchDate,
+        match_time: m.matchTime,
+        match_number: index + 1,
+        stage: 'preliminary',
+        status: 'scheduled',
+      }))
+
+      const { error } = await supabase.from('matches').insert(matchesToInsert)
+      if (error) throw error
+
+      return { created: matchesToInsert.length }
+    },
+    onSuccess: (data) => {
+      toast.success(`予選リーグ ${data.created}試合を生成しました`)
+      queryClient.invalidateQueries({ queryKey: ['matches', tournamentId] })
+      setShowGenerateModal(false)
+    },
+    onError: (error: any) => {
+      toast.error(error.message || '日程生成に失敗しました')
     },
   })
 
-  // 決勝トーナメント生成（Supabase版では未サポート）
+  // 決勝トーナメント＋研修試合生成
   const generateFinalsMutation = useMutation({
     mutationFn: async () => {
-      toast.error('日程自動生成はSupabase版では未サポートです')
-      throw new Error('未サポート')
+      // Core API の接続確認
+      const isHealthy = await checkCoreApiHealth()
+      if (!isHealthy) {
+        throw new Error('日程生成サーバーに接続できません。サーバーが起動しているか確認してください。')
+      }
+
+      // 順位表を取得
+      const standingsData = await standingsApi.getAll(tournamentId)
+      if (!standingsData || standingsData.length === 0) {
+        throw new Error('順位表データがありません。予選リーグを先に完了してください。')
+      }
+
+      // グループ別に整理
+      const standingsByGroup: Record<string, any[]> = {}
+      for (const s of standingsData) {
+        if (!s.group_id) continue
+        if (!standingsByGroup[s.group_id]) {
+          standingsByGroup[s.group_id] = []
+        }
+        standingsByGroup[s.group_id].push({
+          id: s.team_id,
+          name: s.team?.name || `Team ${s.team_id}`,
+          group: s.group_id,
+          rank: s.rank,
+          points: s.points,
+          goalDiff: s.goal_diff,
+          goalsFor: s.goals_for,
+        })
+      }
+
+      // 対戦済みペアを取得（同グループ内）
+      const playedPairs: [number, number][] = []
+      for (const teams of Object.values(standingsByGroup)) {
+        for (let i = 0; i < teams.length; i++) {
+          for (let j = i + 1; j < teams.length; j++) {
+            playedPairs.push([teams[i].id, teams[j].id])
+          }
+        }
+      }
+
+      // Core API を呼び出して日程を生成
+      const result = await generateFinalDaySchedule(standingsByGroup, playedPairs)
+
+      if (!result.success) {
+        throw new Error('日程生成に失敗しました')
+      }
+
+      // 試合日（大会最終日）
+      const matchDate = tournament?.endDate || new Date().toISOString().split('T')[0]
+
+      // 決勝トーナメント会場（最初の会場を使用）
+      const finalsVenueId = venues[0]?.id || 1
+
+      // 既存の決勝トーナメント試合を削除
+      await supabase
+        .from('matches')
+        .delete()
+        .eq('tournament_id', tournamentId)
+        .in('stage', ['finals', 'semifinal', 'third_place', 'final'])
+
+      // 決勝トーナメントの試合を保存
+      let created = 0
+      if (result.tournament && result.tournament.length > 0) {
+        const tournamentMatches = result.tournament.map((m, idx) => ({
+          tournament_id: tournamentId,
+          home_team_id: m.home_team_id,
+          away_team_id: m.away_team_id,
+          venue_id: finalsVenueId,
+          match_date: matchDate,
+          match_time: m.kickoff,
+          match_number: 100 + idx + 1,
+          stage: m.match_type === 'semifinal1' || m.match_type === 'semifinal2' ? 'semifinal' :
+                 m.match_type === 'third_place' ? 'third_place' :
+                 m.match_type === 'final' ? 'final' : 'finals',
+          round: m.match_type,
+          status: 'scheduled',
+        }))
+
+        const { error: tournamentError } = await supabase.from('matches').insert(tournamentMatches)
+        if (tournamentError) console.error('Tournament insert error:', tournamentError)
+        created += tournamentMatches.length
+      }
+
+      return { created, warnings: result.warnings }
+    },
+    onSuccess: (data) => {
+      toast.success(`決勝トーナメント ${data.created}試合を生成しました`)
+      if (data.warnings && data.warnings.length > 0) {
+        data.warnings.forEach((w: string) => toast(w, { icon: '⚠️' }))
+      }
+      queryClient.invalidateQueries({ queryKey: ['matches', tournamentId] })
+      setShowGenerateModal(false)
+    },
+    onError: (error: any) => {
+      toast.error(error.message || '日程生成に失敗しました')
     },
   })
 
-  // 研修試合生成（Supabase版では未サポート）
+  // 研修試合生成
   const generateTrainingMutation = useMutation({
     mutationFn: async () => {
-      toast.error('日程自動生成はSupabase版では未サポートです')
-      throw new Error('未サポート')
+      // Core API の接続確認
+      const isHealthy = await checkCoreApiHealth()
+      if (!isHealthy) {
+        throw new Error('日程生成サーバーに接続できません。サーバーが起動しているか確認してください。')
+      }
+
+      // 順位表を取得
+      const standingsData = await standingsApi.getAll(tournamentId)
+      if (!standingsData || standingsData.length === 0) {
+        throw new Error('順位表データがありません。予選リーグを先に完了してください。')
+      }
+
+      // グループ別に整理
+      const standingsByGroup: Record<string, any[]> = {}
+      for (const s of standingsData) {
+        if (!s.group_id) continue
+        if (!standingsByGroup[s.group_id]) {
+          standingsByGroup[s.group_id] = []
+        }
+        standingsByGroup[s.group_id].push({
+          id: s.team_id,
+          name: s.team?.name || `Team ${s.team_id}`,
+          group: s.group_id,
+          rank: s.rank,
+          points: s.points,
+          goalDiff: s.goal_diff,
+          goalsFor: s.goals_for,
+        })
+      }
+
+      // 対戦済みペアを取得
+      const playedPairs: [number, number][] = []
+      for (const teams of Object.values(standingsByGroup)) {
+        for (let i = 0; i < teams.length; i++) {
+          for (let j = i + 1; j < teams.length; j++) {
+            playedPairs.push([teams[i].id, teams[j].id])
+          }
+        }
+      }
+
+      // Core API を呼び出して日程を生成
+      const result = await generateFinalDaySchedule(standingsByGroup, playedPairs)
+
+      if (!result.success) {
+        throw new Error('日程生成に失敗しました')
+      }
+
+      // 試合日（大会最終日）
+      const matchDate = tournament?.endDate || new Date().toISOString().split('T')[0]
+
+      // 既存の研修試合を削除
+      await supabase
+        .from('matches')
+        .delete()
+        .eq('tournament_id', tournamentId)
+        .eq('stage', 'training')
+
+      // 研修試合を保存
+      let created = 0
+      if (result.training && result.training.length > 0) {
+        // 会場名からIDを取得するマップを作成
+        const venueNameToId: Record<string, number> = {}
+        venues.forEach(v => {
+          venueNameToId[v.name] = v.id
+          // 部分一致も対応
+          if (v.name.includes('浦和南')) venueNameToId['浦和南高G'] = v.id
+          if (v.name.includes('市立浦和')) venueNameToId['市立浦和高G'] = v.id
+          if (v.name.includes('浦和学院')) venueNameToId['浦和学院高G'] = v.id
+          if (v.name.includes('武南')) venueNameToId['武南高G'] = v.id
+        })
+
+        const trainingMatches = result.training.map((m, idx) => ({
+          tournament_id: tournamentId,
+          home_team_id: m.home_team_id,
+          away_team_id: m.away_team_id,
+          venue_id: venueNameToId[m.venue] || venues[idx % venues.length]?.id || 1,
+          match_date: matchDate,
+          match_time: m.kickoff,
+          match_number: 200 + idx + 1,
+          stage: 'training',
+          status: 'scheduled',
+        }))
+
+        const { error: trainingError } = await supabase.from('matches').insert(trainingMatches)
+        if (trainingError) console.error('Training insert error:', trainingError)
+        created += trainingMatches.length
+      }
+
+      return { created, warnings: result.warnings }
+    },
+    onSuccess: (data) => {
+      toast.success(`研修試合 ${data.created}試合を生成しました`)
+      if (data.warnings && data.warnings.length > 0) {
+        data.warnings.forEach((w: string) => toast(w, { icon: '⚠️' }))
+      }
+      queryClient.invalidateQueries({ queryKey: ['matches', tournamentId] })
+      setShowGenerateModal(false)
+    },
+    onError: (error: any) => {
+      toast.error(error.message || '日程生成に失敗しました')
     },
   })
 

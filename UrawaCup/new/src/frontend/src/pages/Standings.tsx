@@ -105,9 +105,9 @@ function Standings() {
     queryKey: ['standings', tournamentId],
     queryFn: () => standingApi.getStandingsByGroup(tournamentId),
     // 自動リフェッチの設定
-    refetchOnWindowFocus: true,
-    staleTime: 5000, // 5秒間はフレッシュとみなす
-    refetchInterval: 10000, // 10秒ごとにポーリング（WebSocketのバックアップ）
+    refetchOnWindowFocus: false, // WebSocketで更新されるので不要
+    staleTime: 30000, // 30秒間はフレッシュとみなす（WebSocketで更新される）
+    gcTime: 5 * 60 * 1000, // 5分間キャッシュを保持
   });
 
   // データ更新時のアニメーション

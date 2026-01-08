@@ -19,12 +19,9 @@ const queryClient = new QueryClient({
       staleTime: 1000 * 60 * 5, // 5分間キャッシュ
       retry: 1,
       refetchOnWindowFocus: false,
-      // オフライン対応: ネットワークエラー時はキャッシュを使用
-      networkMode: 'offlineFirst',
     },
     mutations: {
-      // オフライン対応: ネットワークエラー時はキューに追加
-      networkMode: 'offlineFirst',
+      retry: 1,
     },
   },
 })

@@ -4,6 +4,8 @@
  * 400 Bad Request エラーを防ぐための事前検証
  */
 
+import type { Database } from '../types/database.types'
+
 /**
  * バリデーションエラー
  */
@@ -174,8 +176,12 @@ export function validateOptionalTime(value: unknown, fieldName: string): string 
 /**
  * 試合ステータスの許可値
  */
-export const MATCH_STATUSES = ['scheduled', 'in_progress', 'completed', 'cancelled', 'postponed'] as const
-export type MatchStatus = typeof MATCH_STATUSES[number]
+/**
+ * 試合ステータスの許可値
+ */
+export type MatchStatus = Database['public']['Enums']['match_status']
+export const MATCH_STATUSES: MatchStatus[] = ['scheduled', 'in_progress', 'completed', 'cancelled']
+
 
 /**
  * 試合ステータスチェック
@@ -187,8 +193,12 @@ export function validateMatchStatus(value: unknown): MatchStatus {
 /**
  * チームタイプの許可値
  */
-export const TEAM_TYPES = ['local', 'invited'] as const
-export type TeamType = typeof TEAM_TYPES[number]
+/**
+ * チームタイプの許可値
+ */
+export type TeamType = Database['public']['Enums']['team_type']
+export const TEAM_TYPES: TeamType[] = ['local', 'invited']
+
 
 /**
  * チームタイプチェック
@@ -200,8 +210,14 @@ export function validateTeamType(value: unknown): TeamType {
 /**
  * ステージの許可値
  */
-export const MATCH_STAGES = ['preliminary', 'final', 'training'] as const
-export type MatchStage = typeof MATCH_STAGES[number]
+/**
+ * ステージの許可値
+ */
+export type MatchStage = Database['public']['Enums']['match_stage']
+// Note: validation.ts historically had a subset. If we want to support all, we should list all.
+// For now, keeping the subset used by frontend, but typed as MatchStage.
+export const MATCH_STAGES: MatchStage[] = ['preliminary', 'final', 'training']
+
 
 /**
  * ステージチェック
@@ -213,8 +229,12 @@ export function validateMatchStage(value: unknown): MatchStage {
 /**
  * 試合結果の許可値
  */
-export const MATCH_RESULTS = ['home_win', 'away_win', 'draw'] as const
-export type MatchResult = typeof MATCH_RESULTS[number]
+/**
+ * 試合結果の許可値
+ */
+export type MatchResult = Database['public']['Enums']['match_result']
+export const MATCH_RESULTS: MatchResult[] = ['home_win', 'away_win', 'draw']
+
 
 /**
  * ハーフの許可値

@@ -48,70 +48,83 @@ export const useAuthStore = create<AuthState>()(
       login: async (credentials: LoginRequest): Promise<boolean> => {
         set({ isLoading: true, error: null })
         try {
-          // 開発環境のみ: admin/admin123 でログイン可能
-          if (import.meta.env.DEV && credentials.username === 'admin' && credentials.password === 'admin123') {
-            const devUser: User = {
-              id: 1 as any,
-              username: 'admin',
-              email: 'admin@urawa-cup.local',
-              role: 'admin',
-              name: '管理者',
-              venueId: undefined,
+          // タイムアウト用プロミス (15秒)
+          const timeoutPromise = new Promise<{ timeout: true }>((_, reject) =>
+            setTimeout(() => reject(new Error('ログイン処理がタイムアウトしました。通信環境を確認してください。')), 15000)
+          )
+
+          // 実際のログイン処理
+          const loginProcess = async () => {
+            // 開発環境のみ: admin/admin123 でログイン可能
+            if (import.meta.env.DEV && credentials.username === 'admin' && credentials.password === 'admin123') {
+              const devUser: User = {
+                id: 1 as any,
+                username: 'admin',
+                email: 'admin@urawa-cup.local',
+                role: 'admin',
+                name: '管理者',
+                venueId: undefined,
+              }
+              set({
+                user: devUser,
+                accessToken: 'dev-token',
+                isAuthenticated: true,
+                isLoading: false,
+                error: null,
+              })
+              console.warn('[DEV] 開発用バイパスでログインしました')
+              return true
             }
+
+            // Supabase Authでログイン（usernameをemailとして使用）
+            const email = credentials.username.includes('@')
+              ? credentials.username
+              : `${credentials.username}@urawa-cup.local`
+
+            const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+              email,
+              password: credentials.password,
+            })
+
+            if (authError) throw authError
+
+            if (!authData.user || !authData.session) {
+              throw new Error('認証に失敗しました')
+            }
+
+            // プロフィール情報を取得
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', authData.user.id)
+              .single()
+
+            const user: User = {
+              id: authData.user.id as any,
+              username: profile?.username || authData.user.email?.split('@')[0] || 'user',
+              email: authData.user.email || '',
+              role: (profile?.role as UserRole) || 'viewer',
+              name: profile?.display_name || authData.user.email?.split('@')[0] || 'User',
+              venueId: profile?.venue_id,
+            }
+
             set({
-              user: devUser,
-              accessToken: 'dev-token',
+              user,
+              accessToken: authData.session.access_token,
               isAuthenticated: true,
               isLoading: false,
               error: null,
             })
-            console.warn('[DEV] 開発用バイパスでログインしました')
+
             return true
           }
 
-          // Supabase Authでログイン（usernameをemailとして使用）
-          const email = credentials.username.includes('@')
-            ? credentials.username
-            : `${credentials.username}@urawa-cup.local`
-
-          const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-            email,
-            password: credentials.password,
-          })
-
-          if (authError) throw authError
-
-          if (!authData.user || !authData.session) {
-            throw new Error('認証に失敗しました')
-          }
-
-          // プロフィール情報を取得
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', authData.user.id)
-            .single()
-
-          const user: User = {
-            id: authData.user.id as any,
-            username: profile?.username || authData.user.email?.split('@')[0] || 'user',
-            email: authData.user.email || '',
-            role: (profile?.role as UserRole) || 'viewer',
-            name: profile?.display_name || authData.user.email?.split('@')[0] || 'User',
-            venueId: profile?.venue_id,
-          }
-
-          set({
-            user,
-            accessToken: authData.session.access_token,
-            isAuthenticated: true,
-            isLoading: false,
-            error: null,
-          })
-
+          // 処理とタイムアウトを競合させる
+          await Promise.race([loginProcess(), timeoutPromise])
           return true
         } catch (error) {
           const message = error instanceof Error ? error.message : 'ログインに失敗しました'
+          console.error('Login error:', error)
           set({
             user: null,
             accessToken: null,
@@ -178,6 +191,9 @@ export const useAuthStore = create<AuthState>()(
           }
         } catch (error) {
           console.error('セッション確認エラー:', error)
+          // エラー時も isLoading を false にする
+          set({ isAuthenticated: false, user: null, isLoading: false })
+          return
         }
 
         // 未認証状態
