@@ -40,6 +40,7 @@ const SUPABASE_ERROR_MESSAGES: Record<string, string> = {
   'Failed to fetch': 'サーバーに接続できません。ネットワーク接続を確認してください。',
   'invalid input value for enum': '選択肢の値が不正です。',
   'foreign key violation': '関連するデータが存在しません。',
+  'violates foreign key constraint': 'このチームは試合に登録されているため削除できません。先に関連する試合を削除してください。',
 };
 
 /**
