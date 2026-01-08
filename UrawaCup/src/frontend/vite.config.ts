@@ -9,9 +9,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      // 開発環境でもService Workerを有効化
+      // 開発環境ではService Workerを無効化（警告を防ぐ）
       devOptions: {
-        enabled: true,
+        enabled: false,
         type: 'module',
       },
       // manifestは public/manifest.json を使用

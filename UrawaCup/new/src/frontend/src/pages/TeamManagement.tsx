@@ -40,6 +40,8 @@ function TeamManagement() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkModal, setShowBulkModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [teamToDelete, setTeamToDelete] = useState<Team | null>(null);
   const [editForm, setEditForm] = useState({ name: '', groupId: '', teamType: 'invited', isVenueHost: false });
   const [addForm, setAddForm] = useState({ name: '', groupId: '', teamType: 'invited', isVenueHost: false });
   const [bulkText, setBulkText] = useState('');
@@ -213,6 +215,30 @@ function TeamManagement() {
     setSaving(false);
   };
 
+  // 削除確認モーダルを開く
+  const openDeleteModal = (team: Team) => {
+    setTeamToDelete(team);
+    setShowDeleteModal(true);
+  };
+
+  // チーム削除処理
+  const handleDeleteTeam = async () => {
+    if (!teamToDelete) return;
+    setSaving(true);
+    try {
+      await teamsApi.delete(teamToDelete.id);
+      setTeams(prev => prev.filter(t => t.id !== teamToDelete.id));
+      setShowDeleteModal(false);
+      setTeamToDelete(null);
+      toast.success(`「${teamToDelete.name}」を削除しました`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '削除に失敗しました';
+      toast.error(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) return <LoadingSpinner />;
   return (
     <div className="space-y-6">
@@ -346,6 +372,12 @@ function TeamManagement() {
                         >
                           選手登録
                         </Link>
+                        <button
+                          className="px-3 py-1 text-sm text-red-600 border border-red-600 rounded hover:bg-red-50"
+                          onClick={() => openDeleteModal(team)}
+                        >
+                          削除
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -555,6 +587,45 @@ function TeamManagement() {
               disabled={saving || !bulkText.trim()}
             >
               {saving ? '登録中...' : '一括登録'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* 削除確認モーダル */}
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={() => {
+          setShowDeleteModal(false);
+          setTeamToDelete(null);
+        }}
+        title="チーム削除の確認"
+      >
+        <div className="space-y-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-800">
+              <span className="font-bold">「{teamToDelete?.name}」</span>を削除しますか？
+            </p>
+            <p className="text-red-600 text-sm mt-2">
+              この操作は取り消せません。チームに関連する選手データも削除される可能性があります。
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              className="btn-secondary"
+              onClick={() => {
+                setShowDeleteModal(false);
+                setTeamToDelete(null);
+              }}
+            >
+              キャンセル
+            </button>
+            <button
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              onClick={handleDeleteTeam}
+              disabled={saving}
+            >
+              {saving ? '削除中...' : '削除する'}
             </button>
           </div>
         </div>

@@ -15,24 +15,10 @@ let lastSessionCheck = 0
 const SESSION_CHECK_INTERVAL = 60000 // 1分
 
 /**
- * 401対策: セッションの有効性を確認し、必要に応じてリフレッシュ
+ * 401対策: セッションの有効性を確認（簡略化版）
  */
 export async function ensureValidSession(): Promise<boolean> {
-  // 既にチェック中なら待機
-  if (sessionCheckInProgress) {
-    await new Promise(resolve => setTimeout(resolve, 100))
-    return ensureValidSession()
-  }
-
-  // 最近チェック済みならスキップ
-  const now = Date.now()
-  if (now - lastSessionCheck < SESSION_CHECK_INTERVAL) {
-    return true
-  }
-
   try {
-    sessionCheckInProgress = true
-
     const { data: { session }, error } = await supabase.auth.getSession()
 
     if (error) {
@@ -41,34 +27,14 @@ export async function ensureValidSession(): Promise<boolean> {
     }
 
     if (!session) {
+      console.warn('[Session] No active session')
       return false
     }
 
-    // トークンの有効期限をチェック
-    const expiresAt = session.expires_at
-    if (expiresAt) {
-      const expiresTime = expiresAt * 1000
-      const timeUntilExpiry = expiresTime - now
-
-      // 5分以内に期限切れならリフレッシュ
-      if (timeUntilExpiry < 5 * 60 * 1000) {
-        console.log('[Session] Token expiring soon, refreshing...')
-        const { error: refreshError } = await supabase.auth.refreshSession()
-        if (refreshError) {
-          console.error('[Session] Refresh failed:', refreshError)
-          return false
-        }
-        console.log('[Session] Token refreshed successfully')
-      }
-    }
-
-    lastSessionCheck = now
     return true
   } catch (error) {
     console.error('[Session] Unexpected error:', error)
     return false
-  } finally {
-    sessionCheckInProgress = false
   }
 }
 

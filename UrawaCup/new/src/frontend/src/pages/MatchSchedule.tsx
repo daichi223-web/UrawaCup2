@@ -445,7 +445,9 @@ function MatchSchedule() {
               <p className="text-lg mb-2">この日の試合はありません</p>
               <p className="text-sm">
                 {activeTab === 'day1' || activeTab === 'day2'
-                  ? '上の「予選リーグ日程を生成」ボタンから日程を作成してください'
+                  ? (hasPreliminaryMatches
+                      ? '他の日に予選リーグの試合が登録されています'
+                      : '上の「予選リーグ日程を生成」ボタンから日程を作成してください')
                   : '予選リーグが終了後、決勝トーナメントと研修試合を生成できます'}
               </p>
             </div>

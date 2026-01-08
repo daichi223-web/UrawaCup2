@@ -154,12 +154,6 @@ export const teamsApi = {
     // 400対策: IDバリデーション
     validateId(id, 'チームID')
 
-    // 404対策: 存在確認
-    const exists = await checkExists('teams', id, 'チーム')
-    if (!exists) {
-      throw new Error('指定されたチームが見つかりません。')
-    }
-
     // 全角半角正規化
     const normalizedUpdates = { ...updates }
     if (normalizedUpdates.name) {
@@ -188,12 +182,6 @@ export const teamsApi = {
 
     // 400対策: IDバリデーション
     validateId(id, 'チームID')
-
-    // 404対策: 存在確認
-    const exists = await checkExists('teams', id, 'チーム')
-    if (!exists) {
-      throw new Error('指定されたチームが見つかりません。')
-    }
 
     const { error } = await supabase
       .from('teams')
