@@ -1,6 +1,7 @@
 import { Calendar, Users, Trophy, FileText, Clock, Eye } from 'lucide-react'
 import { useState, useEffect } from 'react';
 import { teamsApi, matchesApi } from '@/lib/api';
+import { withTimeout } from '@/lib/supabase';
 import { useAppStore } from '@/stores/appStore';
 import { useAuthStore } from '@/stores/authStore';
 import LoadingSpinner from '../components/common/LoadingSpinner';

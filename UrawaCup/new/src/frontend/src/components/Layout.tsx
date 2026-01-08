@@ -102,6 +102,9 @@ function Layout({ children }: LayoutProps) {
   const { data: tournament } = useQuery({
     queryKey: ['tournament', 1], // TODO: ID動的化
     queryFn: () => tournamentsApi.getById(1),
+    staleTime: 1000 * 60 * 10, // 10分間キャッシュ
+    retry: 1, // 1回だけリトライ
+    retryDelay: 1000, // リトライは1秒後
   })
 
   // ストアの状態を更新

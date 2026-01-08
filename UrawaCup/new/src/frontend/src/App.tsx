@@ -1,15 +1,22 @@
+console.log('[App] 1. Starting App imports...')
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
+console.log('[App] 2. React Router imported')
 import Layout from './components/Layout'
+console.log('[App] 3. Layout imported')
 import LoadingSpinner from './components/common/LoadingSpinner'
 import { RequireAdmin, RequireVenueManager } from './components/auth'
+console.log('[App] 4. Auth components imported')
 import { useAuthStore } from './stores/authStore'
+console.log('[App] 5. authStore imported')
 import { isSupabaseConfigured } from './lib/supabase'
+console.log('[App] 6. supabase imported')
 
 // PWAコンポーネント
 import { UpdatePrompt, InstallPrompt, ConflictResolver } from './components/pwa'
 import { useSyncState } from './hooks/usePWA'
+console.log('[App] 7. PWA components imported')
 
 // ページコンポーネントを遅延読み込み
 const Login = lazy(() => import('./pages/Login'))
