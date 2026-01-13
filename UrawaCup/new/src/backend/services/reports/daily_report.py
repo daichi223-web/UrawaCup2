@@ -15,9 +15,7 @@ from typing import Optional, List
 
 from sqlalchemy.orm import Session, joinedload
 
-from reportlab.lib import colors
 from reportlab.lib.units import mm
-from reportlab.platypus import Table, TableStyle
 
 from .base import BaseReportGenerator
 from .types import (
@@ -26,6 +24,7 @@ from .types import (
     GoalData,
     SenderInfo,
     VenueInfo,
+    VenueMatchesData,
     TournamentInfo,
 )
 
@@ -44,6 +43,13 @@ class DailyReportGenerator(BaseReportGenerator):
     """
 
     MAX_MATCHES_PER_PAGE = 4  # 1ページあたりの最大試合数
+
+    # 高さ定数（mm単位）
+    MATCH_BASE_HEIGHT = 13.5  # 試合基本高さ (5mm + 4mm + 4mm + 0.5mm余白)
+    MATCH_SPACING = 4  # 試合間スペース
+    GOAL_LINE_HEIGHT = 3.5  # ゴール1行の高さ
+    VENUE_HEADER_HEIGHT = 25  # 会場ヘッダー高さ
+    CONTINUATION_HEADER_HEIGHT = 15  # 継続ページヘッダー高さ
 
     def __init__(
         self,
@@ -78,6 +84,32 @@ class DailyReportGenerator(BaseReportGenerator):
             name="担当者",
             contact=""
         )
+
+    def _calculate_match_height(self, match: MatchResultData) -> float:
+        """試合1つの描画に必要な高さを計算（mm単位）"""
+        height = self.MATCH_BASE_HEIGHT + self.MATCH_SPACING
+        if match.goals:
+            height += len(match.goals) * self.GOAL_LINE_HEIGHT
+        return height * mm
+
+    def _draw_continuation_header(self, c, data: DailyReportData, venue: VenueInfo, height: float) -> float:
+        """継続ページ用のシンプルなヘッダーを描画"""
+        width, _ = self.PAGE_SIZE
+        y = height - self.MARGIN_TOP
+
+        # 会場名と日付のみ（コンパクト）
+        c.setFont(self._font_name, self.FONT_SIZE_BODY)
+        c.drawString(
+            self.MARGIN_LEFT, y,
+            f"{data.tournament.name} - {venue.name}（続き）"
+        )
+        y -= 6 * mm
+
+        # 区切り線
+        c.line(self.MARGIN_LEFT, y, width - self.MARGIN_RIGHT, y)
+        y -= 4 * mm
+
+        return y
 
     def _load_data(self) -> DailyReportData:
         """報告書用データをDBから読み込み"""
@@ -115,8 +147,10 @@ class DailyReportGenerator(BaseReportGenerator):
 
         matches = query.order_by(Match.venue_id, Match.match_order).all()
 
-        # データ変換
+        # データ変換（会場ごとにグループ化）
         match_results = []
+        venue_matches_dict = {}  # venue_id -> (VenueInfo, [MatchResultData])
+
         for match in matches:
             goals = []
             for goal in sorted(match.goals, key=lambda g: (g.half, g.minute)):
@@ -129,7 +163,7 @@ class DailyReportGenerator(BaseReportGenerator):
                     is_penalty=goal.is_penalty,
                 ))
 
-            match_results.append(MatchResultData(
+            match_data = MatchResultData(
                 match_number=match.match_order,
                 kickoff_time=match.match_time.strftime("%H:%M") if match.match_time else "",
                 home_team=match.home_team.short_name or match.home_team.name,
@@ -142,7 +176,28 @@ class DailyReportGenerator(BaseReportGenerator):
                 home_pk=match.home_pk,
                 away_pk=match.away_pk,
                 goals=goals,
-            ))
+            )
+
+            match_results.append(match_data)
+
+            # 会場ごとにグループ化
+            vid = match.venue_id
+            if vid not in venue_matches_dict:
+                venue_matches_dict[vid] = (
+                    VenueInfo(
+                        id=match.venue.id,
+                        name=match.venue.name,
+                        group_id=match.venue.group_id if hasattr(match.venue, 'group_id') else None,
+                    ),
+                    []
+                )
+            venue_matches_dict[vid][1].append(match_data)
+
+        # 会場ごとの試合データをリストに変換
+        venue_matches_list = [
+            VenueMatchesData(venue=venue_info, matches=match_list)
+            for venue_info, match_list in venue_matches_dict.values()
+        ]
 
         # 日数計算
         day_number = 1
@@ -168,6 +223,7 @@ class DailyReportGenerator(BaseReportGenerator):
             sender=self._get_sender(tournament),
             recipients=[],  # 送信先は別途取得
             matches=match_results,
+            venue_matches=venue_matches_list,
         )
 
     def generate(self, output_path: Optional[str] = None) -> io.BytesIO:
@@ -183,31 +239,119 @@ class DailyReportGenerator(BaseReportGenerator):
         c = self._create_canvas(buffer)
         width, height = self.PAGE_SIZE
 
-        # ヘッダー描画
-        y = self._draw_report_header(c, data, height)
+        # 会場ごとに描画（必要に応じてページ分割）
+        if data.venue_matches:
+            for venue_idx, venue_data in enumerate(data.venue_matches):
+                # 最初の会場以外は改ページ
+                if venue_idx > 0:
+                    c.showPage()
 
-        # 試合結果描画
-        for i, match in enumerate(data.matches):
-            # 改ページチェック
-            required_height = 50 * mm + len(match.goals) * 5 * mm
-            y = self._new_page_if_needed(c, y, required_height)
+                # 会場別ヘッダー描画
+                y = self._draw_venue_header(c, data, venue_data.venue, height)
 
-            if y == height - self.MARGIN_TOP:
-                # 新ページのヘッダー
-                c.setFont(self._font_name, self.FONT_SIZE_BODY)
-                c.drawString(self.MARGIN_LEFT, y, f"{data.tournament.name} - {data.report_date.isoformat()}")
-                y -= 10 * mm
+                # その会場の試合結果をコンパクトに描画
+                for match in venue_data.matches:
+                    # 必要な高さを計算してページチェック
+                    required_height = self._calculate_match_height(match)
 
-            y = self._draw_match_result(c, match, y)
-            y -= 8 * mm
+                    # ページに収まらない場合は改ページ
+                    if y - required_height < self.MARGIN_BOTTOM:
+                        self._draw_footer(c)
+                        c.showPage()
+                        # 継続ページ用のヘッダーを描画
+                        y = self._draw_continuation_header(c, data, venue_data.venue, height)
 
-        # フッター
-        self._draw_footer(c)
+                    y = self._draw_match_result_compact(c, match, y)
+                    y -= 4 * mm
+
+                # フッター
+                self._draw_footer(c)
+        else:
+            # 会場ごとのグループ化がない場合は従来の方式
+            y = self._draw_report_header(c, data, height)
+
+            for i, match in enumerate(data.matches):
+                required_height = 50 * mm + len(match.goals) * 5 * mm
+                y = self._new_page_if_needed(c, y, required_height)
+
+                if y == height - self.MARGIN_TOP:
+                    c.setFont(self._font_name, self.FONT_SIZE_BODY)
+                    c.drawString(self.MARGIN_LEFT, y, f"{data.tournament.name} - {data.report_date.isoformat()}")
+                    y -= 10 * mm
+
+                y = self._draw_match_result(c, match, y)
+                y -= 8 * mm
+
+            self._draw_footer(c)
 
         c.save()
         buffer.seek(0)
 
         return buffer
+
+    def _draw_venue_header(self, c, data: DailyReportData, venue: VenueInfo, height: float) -> float:
+        """会場別ヘッダーを描画（コンパクト版）"""
+        width, _ = self.PAGE_SIZE
+        y = height - self.MARGIN_TOP
+
+        # タイトル
+        c.setFont(self._font_name, self.FONT_SIZE_TITLE)
+        title = f"{data.tournament.name} 試合結果報告書"
+        c.drawString(self.MARGIN_LEFT, y, title)
+        y -= 8 * mm
+
+        # 日付・会場（1行にまとめる）
+        c.setFont(self._font_name, self.FONT_SIZE_BODY)
+        c.drawString(
+            self.MARGIN_LEFT, y,
+            f"{data.report_date.isoformat()}（第{data.day_number}日）  会場：{venue.name}"
+        )
+        y -= 6 * mm
+
+        # 発信元情報
+        c.setFont(self._font_name, self.FONT_SIZE_TABLE)
+        c.drawString(self.MARGIN_LEFT, y, f"発信元：{data.sender.organization} {data.sender.name}")
+        y -= 5 * mm
+
+        # 区切り線
+        c.line(self.MARGIN_LEFT, y, width - self.MARGIN_RIGHT, y)
+        y -= 6 * mm
+
+        return y
+
+    def _draw_match_result_compact(self, c, match: MatchResultData, y: float) -> float:
+        """試合結果をコンパクトに描画（1ページに複数試合収める）"""
+        width, _ = self.PAGE_SIZE
+
+        # 試合時刻・番号とスコアを1行で表示
+        c.setFont(self._font_name, self.FONT_SIZE_BODY)
+        score_line = f"{match.kickoff_time}  第{match.match_number}試合  {match.home_team} {match.home_score_total} - {match.away_score_total} {match.away_team}"
+        c.drawString(self.MARGIN_LEFT, y, score_line)
+        y -= 5 * mm
+
+        # 前後半スコア（1行で）
+        c.setFont(self._font_name, self.FONT_SIZE_TABLE)
+        half_scores = f"    前半 {match.home_score_half1}-{match.away_score_half1}  後半 {match.home_score_half2}-{match.away_score_half2}"
+        if match.has_penalty_shootout:
+            half_scores += f"  PK {match.home_pk}-{match.away_pk}"
+        c.drawString(self.MARGIN_LEFT, y, half_scores)
+        y -= 4 * mm
+
+        # 得点経過（コンパクトに1行ずつ）
+        if match.goals:
+            c.setFont(self._font_name, 8)
+            for goal in match.goals:
+                half_text = "前" if goal.half == 1 else "後"
+                scorer = goal.scorer_name
+                if goal.is_own_goal:
+                    scorer += "(OG)"
+                if goal.is_penalty:
+                    scorer += "(PK)"
+                goal_line = f"      {half_text}{goal.minute}' {goal.team_name} {scorer}"
+                c.drawString(self.MARGIN_LEFT, y, goal_line)
+                y -= 3.5 * mm
+
+        return y
 
     def _draw_report_header(self, c, data: DailyReportData, height: float) -> float:
         """報告書ヘッダーを描画"""

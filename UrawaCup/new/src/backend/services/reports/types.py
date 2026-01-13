@@ -86,6 +86,13 @@ class TournamentInfo:
 
 
 @dataclass
+class VenueMatchesData:
+    """会場ごとの試合データ"""
+    venue: VenueInfo
+    matches: List[MatchResultData]
+
+
+@dataclass
 class DailyReportData:
     """
     日次試合結果報告書データ
@@ -99,6 +106,7 @@ class DailyReportData:
     sender: SenderInfo
     recipients: List[str]        # 送信先名リスト
     matches: List[MatchResultData]
+    venue_matches: List[VenueMatchesData] = field(default_factory=list)  # 会場ごとの試合
     generated_at: datetime = field(default_factory=datetime.now)
 
 

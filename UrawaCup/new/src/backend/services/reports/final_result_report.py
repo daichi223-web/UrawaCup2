@@ -398,29 +398,31 @@ class FinalResultReportGenerator(BaseReportGenerator):
         c.setFont(self._font_name, self.FONT_SIZE_TABLE)
 
         # ヘッダー
-        c.drawString(self.MARGIN_LEFT + 10 * mm, y, "No")
-        c.drawString(self.MARGIN_LEFT + 25 * mm, y, "ホーム")
-        c.drawString(self.MARGIN_LEFT + 70 * mm, y, "スコア")
-        c.drawString(self.MARGIN_LEFT + 100 * mm, y, "アウェイ")
+        c.drawString(self.MARGIN_LEFT + 5 * mm, y, "時刻")
+        c.drawString(self.MARGIN_LEFT + 20 * mm, y, "No")
+        c.drawString(self.MARGIN_LEFT + 35 * mm, y, "ホーム")
+        c.drawString(self.MARGIN_LEFT + 80 * mm, y, "スコア")
+        c.drawString(self.MARGIN_LEFT + 110 * mm, y, "アウェイ")
         y -= 5 * mm
 
         # 区切り線
-        c.line(self.MARGIN_LEFT + 5 * mm, y + 2 * mm, self.MARGIN_LEFT + 150 * mm, y + 2 * mm)
+        c.line(self.MARGIN_LEFT + 5 * mm, y + 2 * mm, self.MARGIN_LEFT + 160 * mm, y + 2 * mm)
 
         # データ
         for match in matches:
             score = f"{match.home_score_total} - {match.away_score_total}"
             half_score = f"({match.home_score_half1}-{match.away_score_half1}/{match.home_score_half2}-{match.away_score_half2})"
 
-            c.drawString(self.MARGIN_LEFT + 10 * mm, y, str(match.match_number))
-            c.drawString(self.MARGIN_LEFT + 25 * mm, y, match.home_team)
-            c.drawString(self.MARGIN_LEFT + 70 * mm, y, score)
-            c.drawString(self.MARGIN_LEFT + 100 * mm, y, match.away_team)
+            c.drawString(self.MARGIN_LEFT + 5 * mm, y, match.kickoff_time)
+            c.drawString(self.MARGIN_LEFT + 20 * mm, y, str(match.match_number))
+            c.drawString(self.MARGIN_LEFT + 35 * mm, y, match.home_team)
+            c.drawString(self.MARGIN_LEFT + 80 * mm, y, score)
+            c.drawString(self.MARGIN_LEFT + 110 * mm, y, match.away_team)
             y -= 4 * mm
 
-            c.drawString(self.MARGIN_LEFT + 70 * mm, y, half_score)
+            c.drawString(self.MARGIN_LEFT + 80 * mm, y, half_score)
             if match.has_penalty_shootout:
-                c.drawString(self.MARGIN_LEFT + 110 * mm, y, f"PK {match.home_pk}-{match.away_pk}")
+                c.drawString(self.MARGIN_LEFT + 120 * mm, y, f"PK {match.home_pk}-{match.away_pk}")
             y -= 5 * mm
 
         return y
