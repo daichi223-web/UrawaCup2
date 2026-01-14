@@ -11,8 +11,9 @@ import { supabase } from '@/lib/supabase'
 import { Modal } from '@/components/ui/Modal'
 import type { Venue, Tournament } from '@/types'
 import { useCreateVenue } from '@/features/venues/hooks'
-import { useCreateTournament } from '@/features/tournaments/hooks'
+import { useCreateTournament, useTournaments } from '@/features/tournaments/hooks'
 import { useAppStore } from '@/stores/appStore'
+import { Copy, ChevronDown, Calendar, Trophy, Check } from 'lucide-react'
 
 // グループの色設定
 const GROUP_COLORS: Record<string, string> = {
@@ -66,6 +67,8 @@ function Settings() {
 
   // 新規大会作成モーダル
   const [showNewTournamentModal, setShowNewTournamentModal] = useState(false)
+  const [createMode, setCreateMode] = useState<'new' | 'copy'>('new')
+  const [copySourceTournamentId, setCopySourceTournamentId] = useState<number | null>(null)
   const [newTournamentForm, setNewTournamentForm] = useState({
     name: '',
     shortName: '',
@@ -77,6 +80,9 @@ function Settings() {
     halfDuration: 25,
     intervalMinutes: 15,
   })
+
+  // 大会セレクター
+  const [showTournamentSelector, setShowTournamentSelector] = useState(false)
 
   // 大会情報を取得
   const { data: tournament } = useQuery({
@@ -90,6 +96,20 @@ function Settings() {
         startDate: data.start_date,
         endDate: data.end_date,
       } as Tournament
+    },
+  })
+
+  // 全大会一覧を取得（セレクター・コピー元用）
+  const { data: allTournaments = [] } = useQuery({
+    queryKey: ['tournaments', 'all'],
+    queryFn: async () => {
+      const data = await tournamentsApi.getAll()
+      return data.map((t: Record<string, unknown>) => ({
+        ...t,
+        shortName: t.short_name,
+        startDate: t.start_date,
+        endDate: t.end_date,
+      })) as Tournament[]
     },
   })
 
@@ -239,6 +259,33 @@ function Settings() {
     updateVenueMutation.mutate(payload)
   }
 
+  // 大会を切り替え
+  const handleSwitchTournament = (t: Tournament) => {
+    setCurrentTournament(t)
+    setShowTournamentSelector(false)
+    queryClient.invalidateQueries({ queryKey: ['tournament'] })
+    queryClient.invalidateQueries({ queryKey: ['venues'] })
+    toast.success(`大会を「${t.shortName || t.name}」に切り替えました`)
+  }
+
+  // コピー元大会を選択したときの処理
+  const handleSelectCopySource = (sourceId: number) => {
+    setCopySourceTournamentId(sourceId)
+    const source = allTournaments.find(t => t.id === sourceId)
+    if (source) {
+      setNewTournamentForm(prev => ({
+        ...prev,
+        name: source.name,
+        shortName: source.shortName || '',
+        edition: (source.edition || 0) + 1,
+        year: new Date().getFullYear(),
+        matchDuration: source.matchDuration || 50,
+        halfDuration: 25,
+        intervalMinutes: source.intervalMinutes || 15,
+      }))
+    }
+  }
+
   // 新規大会を作成
   const handleCreateTournament = () => {
     if (!newTournamentForm.name.trim()) {
@@ -264,6 +311,8 @@ function Settings() {
       {
         onSuccess: (newTournament) => {
           setShowNewTournamentModal(false)
+          setCreateMode('new')
+          setCopySourceTournamentId(null)
           setNewTournamentForm({
             name: '',
             shortName: '',
@@ -275,8 +324,10 @@ function Settings() {
             halfDuration: 25,
             intervalMinutes: 15,
           })
-          toast.success(`大会「${newTournament.name}」を作成しました`)
-          // TODO: 作成した大会に切り替える
+          // 作成した大会に自動切り替え
+          setCurrentTournament(newTournament)
+          queryClient.invalidateQueries({ queryKey: ['tournaments'] })
+          toast.success(`大会「${newTournament.name}」を作成し、切り替えました`)
         },
         onError: (error: Error) => {
           toast.error(`作成に失敗しました: ${error.message}`)
@@ -326,12 +377,86 @@ function Settings() {
             大会の基本設定を行います
           </p>
         </div>
-        <button
-          className="btn-primary"
-          onClick={() => setShowNewTournamentModal(true)}
-        >
-          + 新規大会作成
-        </button>
+        <div className="flex items-center gap-3">
+          {/* 大会セレクター */}
+          <div className="relative">
+            <button
+              className="flex items-center gap-2 px-4 py-2 bg-white border rounded-lg shadow-sm hover:bg-gray-50 min-w-[200px]"
+              onClick={() => setShowTournamentSelector(!showTournamentSelector)}
+            >
+              <Trophy size={18} className="text-primary-600" />
+              <span className="font-medium text-gray-800 truncate">
+                {tournament?.shortName || tournament?.name || '大会を選択'}
+              </span>
+              <ChevronDown size={18} className="ml-auto text-gray-500" />
+            </button>
+
+            {showTournamentSelector && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setShowTournamentSelector(false)}
+                />
+                <div className="absolute right-0 top-full mt-1 w-80 bg-white rounded-lg shadow-xl border z-20 max-h-96 overflow-auto">
+                  <div className="p-2 border-b bg-gray-50">
+                    <span className="text-xs text-gray-500 font-medium">大会を選択</span>
+                  </div>
+                  {allTournaments.length === 0 ? (
+                    <div className="p-4 text-center text-gray-500 text-sm">
+                      大会がありません
+                    </div>
+                  ) : (
+                    allTournaments.map((t) => (
+                      <button
+                        key={t.id}
+                        className={`w-full px-4 py-3 text-left hover:bg-gray-50 flex items-center gap-3 border-b last:border-b-0 ${
+                          t.id === tournamentId ? 'bg-primary-50' : ''
+                        }`}
+                        onClick={() => handleSwitchTournament(t)}
+                      >
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-800">
+                            {t.shortName || t.name}
+                          </div>
+                          <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5">
+                            <Calendar size={12} />
+                            {t.startDate} 〜 {t.endDate}
+                            {t.edition && <span className="ml-2">第{t.edition}回</span>}
+                          </div>
+                        </div>
+                        {t.id === tournamentId && (
+                          <Check size={18} className="text-primary-600" />
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          <button
+            className="btn-primary"
+            onClick={() => {
+              setCreateMode('new')
+              setCopySourceTournamentId(null)
+              setNewTournamentForm({
+                name: '',
+                shortName: '',
+                edition: 1,
+                year: new Date().getFullYear(),
+                startDate: '',
+                endDate: '',
+                matchDuration: 50,
+                halfDuration: 25,
+                intervalMinutes: 15,
+              })
+              setShowNewTournamentModal(true)
+            }}
+          >
+            + 新規大会作成
+          </button>
+        </div>
       </div>
 
       {/* 大会設定 */}
@@ -584,6 +709,69 @@ function Settings() {
         title="新規大会作成"
       >
         <div className="space-y-4">
+          {/* 作成モード選択 */}
+          <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
+            <button
+              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                createMode === 'new'
+                  ? 'bg-white text-primary-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+              onClick={() => {
+                setCreateMode('new')
+                setCopySourceTournamentId(null)
+                setNewTournamentForm({
+                  name: '',
+                  shortName: '',
+                  edition: 1,
+                  year: new Date().getFullYear(),
+                  startDate: '',
+                  endDate: '',
+                  matchDuration: 50,
+                  halfDuration: 25,
+                  intervalMinutes: 15,
+                })
+              }}
+            >
+              新規作成
+            </button>
+            <button
+              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                createMode === 'copy'
+                  ? 'bg-white text-primary-700 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+              onClick={() => setCreateMode('copy')}
+            >
+              <Copy size={16} />
+              過去大会からコピー
+            </button>
+          </div>
+
+          {/* コピー元選択（コピーモードのみ） */}
+          {createMode === 'copy' && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <label className="form-label text-blue-800">コピー元の大会を選択</label>
+              <select
+                className="form-input mt-1"
+                value={copySourceTournamentId || ''}
+                onChange={(e) => handleSelectCopySource(Number(e.target.value))}
+              >
+                <option value="">選択してください...</option>
+                {allTournaments.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.shortName || t.name} {t.edition && `(第${t.edition}回)`}
+                  </option>
+                ))}
+              </select>
+              {copySourceTournamentId && (
+                <p className="text-sm text-blue-700 mt-2">
+                  ※ 大会設定がコピーされます。日程とチームは新しく設定してください。
+                </p>
+              )}
+            </div>
+          )}
+
           <div>
             <label className="form-label">大会名 *</label>
             <input

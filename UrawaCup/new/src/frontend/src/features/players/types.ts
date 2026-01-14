@@ -102,22 +102,26 @@ export interface ImportError {
 }
 
 export interface ImportPreviewResult {
-  format: string;
-  teamInfo: {
+  format?: string;
+  teamInfo?: {
     name: string | null;
     address: string | null;
     tel: string | null;
     fax: string | null;
   } | null;
-  staff: StaffImportRow[];
-  uniforms: UniformImportRow[];
-  players: PlayerImportRow[];
-  errors: ImportError[];
+  staff?: StaffImportRow[] | Array<{ role: string; name: string }>;
+  uniforms?: UniformImportRow[];
+  players: Array<{ number: number; name: string; position?: string }>;
+  errors: string[] | ImportError[];
+  warnings: string[];
 }
 
 export interface ImportResult {
   imported: number;
-  updated: number;
-  skipped: number;
-  errors: ImportError[];
+  updated?: number;
+  skipped?: number;
+  playersImported?: number;
+  staffImported?: number;
+  errors?: ImportError[];
+  warnings?: string[];
 }

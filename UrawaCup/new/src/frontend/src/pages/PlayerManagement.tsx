@@ -9,10 +9,12 @@ import {
   useUpdatePlayer,
   useDeletePlayer,
   useImportExcel,
+  usePreviewExcelImport,
 } from '@/features/players/hooks';
-import type { Player, CreatePlayerInput, UpdatePlayerInput } from '@/features/players/types';
+import type { Player, CreatePlayerInput, UpdatePlayerInput, ImportPreviewResult } from '@/features/players/types';
 import toast from 'react-hot-toast';
 import { useAppStore } from '@/stores/appStore';
+import { FileSpreadsheet, AlertTriangle, Check, X, Users, UserCog } from 'lucide-react';
 
 const POSITIONS = ['GK', 'DF', 'MF', 'FW'] as const;
 const GRADES = [1, 2, 3, 4, 5, 6] as const;
@@ -46,6 +48,16 @@ export default function PlayerManagement() {
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkText, setBulkText] = useState('');
 
+  // Excelプレビューモーダル状態
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewData, setPreviewData] = useState<ImportPreviewResult | null>(null);
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
+  const [importOptions, setImportOptions] = useState({
+    replaceExisting: false,
+    importStaff: true,
+    skipWarnings: false,
+  });
+
   // フォーム
   const [form, setForm] = useState<CreatePlayerInput>({
     teamId: 0,
@@ -63,6 +75,7 @@ export default function PlayerManagement() {
   // Excelインポート
   const excelInputRef = useRef<HTMLInputElement>(null);
   const importExcelMutation = useImportExcel();
+  const previewExcelMutation = usePreviewExcelImport();
 
   // Mutations
   const createMutation = useCreatePlayer();
@@ -160,25 +173,50 @@ export default function PlayerManagement() {
     }
   };
 
-  // Excelインポート
+  // Excelインポート（プレビュー表示）
   const handleExcelImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !selectedTeamId) return;
 
     try {
-      const result = await importExcelMutation.mutateAsync({
+      // まずプレビューを取得
+      const preview = await previewExcelMutation.mutateAsync({
         teamId: selectedTeamId,
         file,
-        options: { replaceExisting: false },
       });
-      toast.success(`${result.imported}名をインポート、${result.updated}名を更新しました`);
+      setPreviewData(preview);
+      setPreviewFile(file);
+      setShowPreviewModal(true);
     } catch (error) {
-      toast.error('インポートに失敗しました');
+      toast.error('ファイルの解析に失敗しました');
     }
 
     // ファイル入力をリセット
     if (excelInputRef.current) {
       excelInputRef.current.value = '';
+    }
+  };
+
+  // プレビュー確認後のインポート実行
+  const handleConfirmImport = async () => {
+    if (!previewFile || !selectedTeamId) return;
+
+    try {
+      const result = await importExcelMutation.mutateAsync({
+        teamId: selectedTeamId,
+        file: previewFile,
+        options: {
+          replaceExisting: importOptions.replaceExisting,
+          importStaff: importOptions.importStaff,
+          skipWarnings: importOptions.skipWarnings,
+        },
+      });
+      toast.success(`${result.imported}名をインポートしました`);
+      setShowPreviewModal(false);
+      setPreviewData(null);
+      setPreviewFile(null);
+    } catch (error) {
+      toast.error('インポートに失敗しました');
     }
   };
 
@@ -552,6 +590,178 @@ export default function PlayerManagement() {
                 disabled={!bulkText.trim() || createMutation.isPending}
               >
                 {createMutation.isPending ? '追加中...' : '一括追加'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Excelインポートプレビューモーダル */}
+      {showPreviewModal && previewData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* ヘッダー */}
+            <div className="bg-primary-600 px-6 py-4 flex items-center gap-3">
+              <FileSpreadsheet className="text-white" size={24} />
+              <h2 className="text-xl font-bold text-white">Excelインポート プレビュー</h2>
+              <button
+                onClick={() => {
+                  setShowPreviewModal(false);
+                  setPreviewData(null);
+                  setPreviewFile(null);
+                }}
+                className="ml-auto text-white/80 hover:text-white"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* コンテンツ */}
+            <div className="flex-1 overflow-auto p-6">
+              {/* サマリー */}
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="bg-blue-50 rounded-lg p-4 flex items-center gap-3">
+                  <Users className="text-blue-600" size={32} />
+                  <div>
+                    <div className="text-2xl font-bold text-blue-800">{previewData.players.length}</div>
+                    <div className="text-sm text-blue-600">選手</div>
+                  </div>
+                </div>
+                <div className="bg-green-50 rounded-lg p-4 flex items-center gap-3">
+                  <UserCog className="text-green-600" size={32} />
+                  <div>
+                    <div className="text-2xl font-bold text-green-800">{previewData.staff?.length || 0}</div>
+                    <div className="text-sm text-green-600">スタッフ</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 警告・エラー */}
+              {(previewData.warnings.length > 0 || previewData.errors.length > 0) && (
+                <div className="mb-6 space-y-2">
+                  {previewData.errors.map((error, i) => (
+                    <div key={`error-${i}`} className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                      <X className="text-red-500 flex-shrink-0 mt-0.5" size={16} />
+                      <span className="text-sm text-red-700">{error}</span>
+                    </div>
+                  ))}
+                  {previewData.warnings.map((warning, i) => (
+                    <div key={`warning-${i}`} className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+                      <AlertTriangle className="text-amber-500 flex-shrink-0 mt-0.5" size={16} />
+                      <span className="text-sm text-amber-700">{warning}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 選手一覧 */}
+              <div className="mb-6">
+                <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                  <Users size={18} /> 選手一覧
+                </h3>
+                <div className="border rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left">番号</th>
+                        <th className="px-3 py-2 text-left">氏名</th>
+                        <th className="px-3 py-2 text-left">ポジション</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {previewData.players.map((player, i) => (
+                        <tr key={i} className="hover:bg-gray-50">
+                          <td className="px-3 py-2">{player.number || '-'}</td>
+                          <td className="px-3 py-2 font-medium">{player.name}</td>
+                          <td className="px-3 py-2 text-gray-600">{player.position || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* スタッフ一覧 */}
+              {previewData.staff && previewData.staff.length > 0 && (
+                <div className="mb-6">
+                  <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                    <UserCog size={18} /> スタッフ一覧
+                  </h3>
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left">役職</th>
+                          <th className="px-3 py-2 text-left">氏名</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {previewData.staff.map((s, i) => (
+                          <tr key={i} className="hover:bg-gray-50">
+                            <td className="px-3 py-2">{s.role}</td>
+                            <td className="px-3 py-2 font-medium">{s.name}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* オプション */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="font-semibold text-gray-800 mb-3">インポートオプション</h3>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={importOptions.replaceExisting}
+                      onChange={(e) => setImportOptions(prev => ({ ...prev, replaceExisting: e.target.checked }))}
+                      className="rounded border-gray-300"
+                    />
+                    <span className="text-sm">既存の選手を削除してインポート</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={importOptions.importStaff}
+                      onChange={(e) => setImportOptions(prev => ({ ...prev, importStaff: e.target.checked }))}
+                      className="rounded border-gray-300"
+                    />
+                    <span className="text-sm">スタッフもインポート</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={importOptions.skipWarnings}
+                      onChange={(e) => setImportOptions(prev => ({ ...prev, skipWarnings: e.target.checked }))}
+                      className="rounded border-gray-300"
+                    />
+                    <span className="text-sm">警告を無視してインポート</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* フッター */}
+            <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3 border-t">
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  setShowPreviewModal(false);
+                  setPreviewData(null);
+                  setPreviewFile(null);
+                }}
+              >
+                キャンセル
+              </button>
+              <button
+                className="btn-primary flex items-center gap-2"
+                onClick={handleConfirmImport}
+                disabled={importExcelMutation.isPending || previewData.players.length === 0}
+              >
+                <Check size={18} />
+                {importExcelMutation.isPending ? 'インポート中...' : `${previewData.players.length}名をインポート`}
               </button>
             </div>
           </div>
