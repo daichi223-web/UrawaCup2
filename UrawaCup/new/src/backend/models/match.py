@@ -111,6 +111,9 @@ class Match(Base, TimestampMixin):
 
     notes = Column(String(500), nullable=True, comment="備考")
 
+    # 最終日確定フラグ（組み合わせ確定済みかどうか）
+    is_confirmed = Column(Boolean, nullable=False, default=False, comment="組み合わせ確定フラグ")
+
     # シード情報（決勝トーナメント用）
     home_seed = Column(String(10), nullable=True, comment="ホームチームシード（例：A1位）")
     away_seed = Column(String(10), nullable=True, comment="アウェイチームシード（例：C1位）")

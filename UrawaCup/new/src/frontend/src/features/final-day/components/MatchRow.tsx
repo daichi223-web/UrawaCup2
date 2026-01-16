@@ -23,9 +23,11 @@ interface MatchRowProps {
   selectedSlot?: { matchId: number; side: 'home' | 'away' } | null;
   /** クリック入れ替えモード用: チームスロットクリック時のコールバック */
   onSlotClick?: (matchId: number, side: 'home' | 'away') => void;
+  /** 会場のグループID（色判定用） */
+  venueGroupId?: string;
 }
 
-export function MatchRow({ match, onMatchClick, showLabel = false, isRematch = false, rematchInfo, selectedSlot, onSlotClick }: MatchRowProps) {
+export function MatchRow({ match, onMatchClick, showLabel = false, isRematch = false, rematchInfo, selectedSlot, onSlotClick, venueGroupId }: MatchRowProps) {
   const isCompleted = match.status === 'completed';
 
   const handleRowClick = () => {
@@ -98,6 +100,8 @@ export function MatchRow({ match, onMatchClick, showLabel = false, isRematch = f
               disabled={isCompleted}
               isSelected={selectedSlot?.matchId === match.id && selectedSlot?.side === 'home'}
               onClick={onSlotClick ? () => onSlotClick(match.id, 'home') : undefined}
+              venueGroupId={venueGroupId}
+              isConfirmed={match.isConfirmed}
             />
             <span className="text-gray-400 text-sm">-</span>
             <DraggableTeamSlot
@@ -107,6 +111,8 @@ export function MatchRow({ match, onMatchClick, showLabel = false, isRematch = f
               disabled={isCompleted}
               isSelected={selectedSlot?.matchId === match.id && selectedSlot?.side === 'away'}
               onClick={onSlotClick ? () => onSlotClick(match.id, 'away') : undefined}
+              venueGroupId={venueGroupId}
+              isConfirmed={match.isConfirmed}
             />
           </div>
           {/* 再戦警告 */}

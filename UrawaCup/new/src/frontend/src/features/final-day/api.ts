@@ -154,18 +154,20 @@ export const finalDayApi = {
   },
 
   /**
-   * 試合のチームを変更
+   * 試合のチームを変更（確定フラグも設定）
    */
   updateMatchTeams: async (
     matchId: number,
     homeTeamId: number,
-    awayTeamId: number
+    awayTeamId: number,
+    isConfirmed: boolean = true
   ): Promise<MatchWithDetails> => {
     const { data, error } = await supabase
       .from('matches')
       .update({
         home_team_id: homeTeamId,
         away_team_id: awayTeamId,
+        is_confirmed: isConfirmed,
       })
       .eq('id', matchId)
       .select(`
@@ -204,8 +206,8 @@ export const finalDayApi = {
     const team1ToSwap = request.match1Side === 'home' ? match1.home_team_id : match1.away_team_id;
     const team2ToSwap = request.match2Side === 'home' ? match2.home_team_id : match2.away_team_id;
 
-    // match1を更新
-    const update1: Record<string, number> = {};
+    // match1を更新（入れ替えにより未確定状態に）
+    const update1: Record<string, number | boolean> = { is_confirmed: false };
     if (request.match1Side === 'home') {
       update1.home_team_id = team2ToSwap;
     } else {
@@ -219,8 +221,8 @@ export const finalDayApi = {
 
     if (update1Error) throw update1Error;
 
-    // match2を更新
-    const update2: Record<string, number> = {};
+    // match2を更新（入れ替えにより未確定状態に）
+    const update2: Record<string, number | boolean> = { is_confirmed: false };
     if (request.match2Side === 'home') {
       update2.home_team_id = team1ToSwap;
     } else {

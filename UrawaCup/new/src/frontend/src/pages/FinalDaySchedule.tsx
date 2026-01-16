@@ -101,12 +101,15 @@ export default function FinalDaySchedule() {
           const managerTeam = managerId
             ? teams.find(t => t.id === managerId)
             : null;
+          // 会場のgroupIdを取得
+          const venueGroupId = venueData?.groupId ?? venueData?.group_id;
 
           trainingMap.set(venueId, {
             id: venueId,
             name: match.venue.name,
             manager: managerTeam?.shortName || managerTeam?.name,
             matches: [],
+            groupId: venueGroupId,
           });
         }
         trainingMap.get(venueId)!.matches.push(match);

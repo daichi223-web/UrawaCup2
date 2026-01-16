@@ -23,6 +23,8 @@ export interface TeamSlot {
   displayName: string;
   /** 参照元試合ID（type='winner'/'loser' の場合） */
   sourceMatchId?: number;
+  /** チームのグループID（色判定用） */
+  groupId?: string;
 }
 
 /** 最終日試合 */
@@ -59,6 +61,8 @@ export interface FinalMatch {
   };
   /** 備考 */
   notes?: string;
+  /** 組み合わせ確定フラグ */
+  isConfirmed?: boolean;
 }
 
 /** 会場別スケジュール */
@@ -73,6 +77,8 @@ export interface VenueSchedule {
   leagueNumber?: number;
   /** 順位範囲（例: "5〜9位"） */
   rankRange?: string;
+  /** 会場のグループID（色判定用） */
+  groupId?: string;
 }
 
 /** 試合notesからリーグ情報を抽出 */
@@ -160,17 +166,20 @@ export function toFinalMatch(match: MatchWithDetails): FinalMatch {
       teamId: match.homeTeam?.id ?? match.homeTeamId,
       teamName: match.homeTeam?.name,
       displayName: match.homeTeam?.name ?? match.homeTeam?.shortName ?? `Team ${match.homeTeamId}`,
+      groupId: match.homeTeam?.groupId,
     },
     awayTeam: {
       type: 'fixed',
       teamId: match.awayTeam?.id ?? match.awayTeamId,
       teamName: match.awayTeam?.name,
       displayName: match.awayTeam?.name ?? match.awayTeam?.shortName ?? `Team ${match.awayTeamId}`,
+      groupId: match.awayTeam?.groupId,
     },
     homeScore: match.homeScoreTotal ?? undefined,
     awayScore: match.awayScoreTotal ?? undefined,
     status: match.status === 'completed' ? 'completed' : 'scheduled',
     notes: match.notes ?? undefined,
+    isConfirmed: match.isConfirmed ?? false,
   };
 }
 

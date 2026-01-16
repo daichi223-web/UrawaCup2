@@ -1576,6 +1576,10 @@ def swap_teams(
     else:
         match2.away_team_id = team1_id
 
+    # 入れ替えにより確定状態をリセット
+    match1.is_confirmed = False
+    match2.is_confirmed = False
+
     db.commit()
 
     return SwapTeamsResponse(

@@ -92,6 +92,7 @@ export function VenueCard({ venue, teams, onMatchClick, onManagerChange, selecte
                   isRematch={rematchMap.get(match.id) ?? false}
                   selectedSlot={selectedSlot}
                   onSlotClick={onSlotClick}
+                  venueGroupId={venue.groupId}
                 />
               ))
             ) : (
