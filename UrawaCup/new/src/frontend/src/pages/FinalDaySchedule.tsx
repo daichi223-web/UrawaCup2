@@ -18,6 +18,7 @@ import {
   useSwapTeams,
   useCheckPlayed,
   useUpdateFinalsBracket,
+  useDeleteFinalMatch,
 } from '@/features/final-day/hooks';
 import type {
   FinalMatch,
@@ -53,6 +54,7 @@ export default function FinalDaySchedule() {
   const swapTeams = useSwapTeams(tournamentId);
   const updateFinalsBracket = useUpdateFinalsBracket(tournamentId);
   const updateVenue = useUpdateVenue();
+  const deleteMatch = useDeleteFinalMatch(tournamentId);
 
   // ローカルステート
   const [editingMatch, setEditingMatch] = useState<FinalMatch | null>(null);
@@ -278,6 +280,19 @@ export default function FinalDaySchedule() {
     }
   };
 
+  // 試合削除
+  const handleDeleteMatch = async (matchId: number) => {
+    try {
+      await deleteMatch.mutateAsync(matchId);
+      toast.success('試合を削除しました');
+      setEditingMatch(null);
+      refetch();
+    } catch (error) {
+      console.error('Failed to delete match:', error);
+      toast.error('削除に失敗しました');
+    }
+  };
+
   // 会場担当変更
   const handleManagerChange = async (venueId: number, teamId: number | null) => {
     try {
@@ -401,6 +416,7 @@ export default function FinalDaySchedule() {
           match={editingMatch}
           teams={teams}
           onSave={handleSaveMatch}
+          onDelete={handleDeleteMatch}
           onClose={() => setEditingMatch(null)}
         />
       )}

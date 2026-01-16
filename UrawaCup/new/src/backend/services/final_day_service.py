@@ -259,23 +259,68 @@ class FinalDayLogic:
         return matches
     
     def _generate_training(self) -> List[MatchWrapper]:
-        """研修試合生成"""
+        """
+        研修試合生成（全チーム2試合を保証）
+        """
         training_teams = []
         for group in self.config.group_names:
             for team in self.standings[group]:
                 if team.rank >= 2:
                     training_teams.append(team)
-        
+
         match_count = {t.team_id: 0 for t in training_teams}
         all_pairs = []
-        
-        # Round 1
+
+        # Round 1: 対角線ペアリング（A-C, B-D）
         all_pairs.extend(self._create_round1_pairs(training_teams, match_count))
-        # Round 2
+        # Round 2: クロスペアリング（A-D, B-C）
         all_pairs.extend(self._create_round2_pairs(training_teams, match_count))
-        
+
+        # 試合数が足りないチームを補完
+        shortfall_teams = [t for t in training_teams if match_count[t.team_id] < self.config.matches_per_team]
+        if shortfall_teams:
+            additional_pairs = self._fill_shortfall(shortfall_teams, match_count)
+            all_pairs.extend(additional_pairs)
+
         matches = self._assign_venues(all_pairs)
         return matches
+
+    def _fill_shortfall(self, shortfall_teams: List[TeamWrapper], match_count: Dict[int, int]) -> List[Tuple[TeamWrapper, TeamWrapper]]:
+        """
+        試合数が足りないチームを補完
+        異なるグループで試合数が足りないチーム同士をペアリング
+        """
+        pairs = []
+        # 試合数が少ない順にソート
+        shortfall_teams = sorted(shortfall_teams, key=lambda t: match_count[t.team_id])
+
+        used = set()
+        for i, team1 in enumerate(shortfall_teams):
+            if team1.team_id in used:
+                continue
+            if match_count[team1.team_id] >= self.config.matches_per_team:
+                continue
+
+            for team2 in shortfall_teams[i+1:]:
+                if team2.team_id in used:
+                    continue
+                if match_count[team2.team_id] >= self.config.matches_per_team:
+                    continue
+                # 同グループは避ける
+                if team1.group == team2.group:
+                    continue
+
+                # ペアリング成立
+                pairs.append((team1, team2))
+                match_count[team1.team_id] += 1
+                match_count[team2.team_id] += 1
+                used.add(team1.team_id)
+                used.add(team2.team_id)
+
+                if match_count[team1.team_id] >= self.config.matches_per_team:
+                    break
+
+        return pairs
     
     def _create_round1_pairs(self, teams: List[TeamWrapper], match_count: Dict[int, int]) -> List[Tuple[TeamWrapper, TeamWrapper]]:
         pairs = []
@@ -316,45 +361,109 @@ class FinalDayLogic:
         return (home, away)
     
     def _assign_venues(self, pairs: List[Tuple[TeamWrapper, TeamWrapper]]) -> List[MatchWrapper]:
+        """
+        会場・時間割り当て（連戦なしを保証）
+
+        連戦の定義: 同じチームが連続するキックオフ時間に試合を持つこと
+        """
         matches = []
         venues = self.config.training_venues
+        kickoff_times = self.config.kickoff_times
         num_venues = len(venues)
-        venue_count = {v: 0 for v in venues}
-        
-        for i, (home, away) in enumerate(pairs):
-            venue_idx = i % num_venues
-            venue = venues[venue_idx]
-            time_idx = venue_count[venue]
-            
-            if time_idx < len(self.config.kickoff_times):
-                kickoff = self.config.kickoff_times[time_idx]
-            else:
-                kickoff = f"{14 + (time_idx - 4)}:00"
-            
-            warning = ""
-            if self.is_played(home.team_id, away.team_id):
-                warning = "⚠️ 対戦済み"
-            
-            match = MatchWrapper(
-                match_id=f"training-{i+1:03d}",
-                match_type=MatchType.TRAINING,
-                venue=venue,
-                kickoff=kickoff,
-                home_team=home,
-                away_team=away,
-                referee="当該",
-                warning=warning,
-            )
-            venue_count[venue] += 1
-            matches.append(match)
-        
-        def sort_key(match):
-            venue_idx = venues.index(match.venue)
-            h, mins = match.kickoff.split(":")
-            total_minutes = int(h) * 60 + int(mins)
-            return (venue_idx, total_minutes)
-            
-        matches.sort(key=sort_key)
+        num_times = len(kickoff_times)
+
+        # スロット管理: slots[time_idx][venue_idx] = pair or None
+        slots = [[None for _ in range(num_venues)] for _ in range(num_times)]
+
+        # 各チームの試合時間を追跡 (team_id -> set of time_idx)
+        team_time_slots: Dict[int, set] = {}
+
+        def is_consecutive(time_idx: int, team_id: int) -> bool:
+            """指定時間が連戦になるかチェック"""
+            if team_id not in team_time_slots:
+                return False
+            existing = team_time_slots[team_id]
+            # 前後の時間枠に既に試合があれば連戦
+            return (time_idx - 1) in existing or (time_idx + 1) in existing
+
+        def can_place(time_idx: int, venue_idx: int, home_id: int, away_id: int) -> bool:
+            """このスロットに配置可能かチェック"""
+            if slots[time_idx][venue_idx] is not None:
+                return False
+            if is_consecutive(time_idx, home_id):
+                return False
+            if is_consecutive(time_idx, away_id):
+                return False
+            return True
+
+        def place_match(time_idx: int, venue_idx: int, pair: Tuple[TeamWrapper, TeamWrapper]):
+            """試合をスロットに配置"""
+            slots[time_idx][venue_idx] = pair
+            home, away = pair
+            if home.team_id not in team_time_slots:
+                team_time_slots[home.team_id] = set()
+            if away.team_id not in team_time_slots:
+                team_time_slots[away.team_id] = set()
+            team_time_slots[home.team_id].add(time_idx)
+            team_time_slots[away.team_id].add(time_idx)
+
+        # ペアを配置（連戦なしを優先）
+        unplaced = list(pairs)
+
+        for time_idx in range(num_times):
+            for venue_idx in range(num_venues):
+                if not unplaced:
+                    break
+
+                # 配置可能なペアを探す
+                placed = False
+                for i, pair in enumerate(unplaced):
+                    home, away = pair
+                    if can_place(time_idx, venue_idx, home.team_id, away.team_id):
+                        place_match(time_idx, venue_idx, pair)
+                        unplaced.pop(i)
+                        placed = True
+                        break
+
+                # 連戦なしで配置できなければ、連戦を許容して配置
+                if not placed and unplaced:
+                    for i, pair in enumerate(unplaced):
+                        home, away = pair
+                        if slots[time_idx][venue_idx] is None:
+                            place_match(time_idx, venue_idx, pair)
+                            unplaced.pop(i)
+                            self.warnings.append(
+                                f"⚠️ 連戦: {home.team_name} または {away.team_name}"
+                            )
+                            break
+
+        # スロットからマッチリストを生成
+        match_idx = 0
+        for time_idx in range(num_times):
+            for venue_idx in range(num_venues):
+                pair = slots[time_idx][venue_idx]
+                if pair:
+                    home, away = pair
+                    kickoff = kickoff_times[time_idx]
+                    venue = venues[venue_idx]
+
+                    warning = ""
+                    if self.is_played(home.team_id, away.team_id):
+                        warning = "⚠️ 対戦済み"
+
+                    match = MatchWrapper(
+                        match_id=f"training-{match_idx+1:03d}",
+                        match_type=MatchType.TRAINING,
+                        venue=venue,
+                        kickoff=kickoff,
+                        home_team=home,
+                        away_team=away,
+                        referee="当該",
+                        warning=warning,
+                    )
+                    matches.append(match)
+                    match_idx += 1
+
         return matches
 
 
